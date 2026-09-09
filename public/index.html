@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>设计助手</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="login-page">
+    <div class="login-container">
+        <section class="studio-intro">
+            <div class="home-brand">
+                <div class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 52 52" fill="none">
+                        <path d="M11 35 25 21l9 8 8-12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <circle cx="11" cy="35" r="3" fill="currentColor"/>
+                        <circle cx="25" cy="21" r="3" fill="currentColor"/>
+                        <circle cx="34" cy="29" r="3" fill="currentColor"/>
+                        <circle cx="42" cy="17" r="3" fill="currentColor"/>
+                    </svg>
+                </div>
+                <span>设计助手</span>
+                <a class="admin-entry" href="/admin.html">管理</a>
+            </div>
+            <div class="login-intro">
+                <h1 class="logo">继续完善<br><em>你的设计</em></h1>
+                <p class="subtitle">把测试证据、自己的判断和新的想法，<br>带进下一次修改。</p>
+            </div>
+            <div class="process-line" aria-hidden="true">
+                <div class="process-step"><i></i><span>测试</span></div><b></b>
+                <div class="process-step"><i></i><span>判断</span></div><b></b>
+                <div class="process-step"><i></i><span>修改</span></div>
+            </div>
+        </section>
+        <main class="login-card">
+            <div class="panel-heading">
+                <span class="panel-kicker">进入工作台</span>
+                <h2>继续上次的设计</h2>
+                <p>输入老师发给你的编号，<br>进入你的设计对话。</p>
+            </div>
+            <form id="loginForm" autocomplete="off">
+                <label class="input-label" for="participantId">你的编号</label>
+                <div class="login-input-row">
+                    <input type="text" id="participantId" placeholder="例如 P01" maxlength="3" pattern="[Pp][0-9]{2}" required autocomplete="off">
+                </div>
+                <button type="submit" class="btn-primary" id="loginBtn">继续 <span aria-hidden="true">→</span></button>
+            </form>
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+            <p class="privacy-note"><i aria-hidden="true"></i>编号仅用于保存你的设计对话。</p>
+        </main>
+    </div>
+    <script src="/js/main.js"></script>
+</body>
+</html>
