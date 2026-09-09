@@ -1,386 +1,379 @@
 import { storageService } from './storageService.js';
-import {
-  COURSE_STAGES,
-  COURSE_STAGE_OPTIONS,
-  DEFAULT_STAGE,
-  FORMAL_RECORD_FIELDS,
-  PARACHUTE_BRIEF,
-  PRACTICE_RECORD_FIELDS,
-  SCORE_FIELDS,
-  SHOPPING_BAG_PRACTICE,
-} from '../config/researchConfig.js';
+import { DEFAULT_SETTINGS, GROUPS, PARACHUTE_CONTEXT, SHOPPING_BAG_CASE, SCORE_FIELDS, Q2_ALLOWED_VALUES, sharedTaskContext } from '../config/researchConfig.js';
 
-function now() {
-  return new Date().toISOString();
-}
+const iso = () => new Date().toISOString();
+const err = (message, status = 400, code = 'research_error') => Object.assign(new Error(message), { status, code });
 
-function makeError(message, status = 400, code = 'research_error', extra = {}) {
-  return Object.assign(new Error(message), { status, code, ...extra });
-}
+function cleanText(v, max = 4000) { return String(v ?? '').trim().slice(0, max); }
+function choice(v, allowed, fallback = '') { const x = cleanText(v, 100); return allowed.includes(x) ? x : fallback; }
+function num(v) { const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : null; }
+function calcMean(values) { const xs = values.filter(v => v !== null); return xs.length ? Math.round(xs.reduce((a,b)=>a+b,0)/xs.length*1000)/1000 : null; }
 
-function sanitizeTestData(value) {
-  if (!value || typeof value !== 'object') return null;
-  const trials = [value.trial_1, value.trial_2, value.trial_3]
-    .map(v => Number(v))
-    .filter(v => Number.isFinite(v) && v >= 0);
-  const mean = trials.length ? Math.round((trials.reduce((a, b) => a + b, 0) / trials.length) * 1000) / 1000 : null;
+export function sanitizeTest(payload = {}, trialCount = 3) {
+  const values = [num(payload.test_1), num(payload.test_2), num(payload.test_3)];
+  const used = values.slice(0, trialCount);
   return {
-    trial_1: Number.isFinite(Number(value.trial_1)) ? Number(value.trial_1) : null,
-    trial_2: Number.isFinite(Number(value.trial_2)) ? Number(value.trial_2) : null,
-    trial_3: Number.isFinite(Number(value.trial_3)) ? Number(value.trial_3) : null,
-    mean_descent_time: mean,
-    opened_normally: value.opened_normally === true || value.opened_normally === 'true' || value.opened_normally === 'yes',
-    stayed_inflated: value.stayed_inflated === true || value.stayed_inflated === 'true' || value.stayed_inflated === 'yes',
-    obvious_sway: value.obvious_sway === true || value.obvious_sway === 'true' || value.obvious_sway === 'yes',
-    obvious_flip: value.obvious_flip === true || value.obvious_flip === 'true' || value.obvious_flip === 'yes',
-    notes: String(value.notes || '').trim(),
+    test_1: values[0], test_2: values[1], test_3: trialCount === 3 ? values[2] : null,
+    mean_descent_time: calcMean(used),
+    opened: choice(payload.opened, ['yes','no','unsure']),
+    sway: choice(payload.sway, ['none','some','strong']),
+    rotation: choice(payload.rotation, ['none','some','strong']),
+    drift: choice(payload.drift, ['none','some','strong']),
+    stable_canopy: choice(payload.stable_canopy, ['yes','partial','no','unsure']),
+    other_observation: cleanText(payload.other_observation),
   };
 }
 
 class ResearchService {
   async readJson(key, fallback = null) {
-    const content = await storageService.getObject(key);
-    if (!content) return fallback;
-    try {
-      return JSON.parse(content);
-    } catch (err) {
-      console.error(`Invalid JSON in ${key}:`, err);
-      return fallback;
-    }
+    const raw = await storageService.getObject(key);
+    if (!raw) return fallback;
+    try { return JSON.parse(raw); } catch { return fallback; }
+  }
+  async writeJson(key, value) { await storageService.putObject(key, JSON.stringify(value)); return value; }
+
+  async getSettings() {
+    const saved = await this.readJson('settings/system.json', {});
+    return { ...DEFAULT_SETTINGS, ...saved };
+  }
+  async saveSettings(patch = {}) {
+    const current = await this.getSettings();
+    const next = {
+      ...current,
+      practice_open: Boolean(patch.practice_open),
+      formal_v2_open: Boolean(patch.formal_v2_open),
+      ai_stage_open: Boolean(patch.ai_stage_open),
+      v3_submission_open: Boolean(patch.v3_submission_open),
+      number_of_test_trials: Number(patch.number_of_test_trials) === 2 ? 2 : 3,
+      max_chat_minutes: Math.min(90, Math.max(1, Number(patch.max_chat_minutes) || 25)),
+      shared_rules_of_thumb: cleanText(patch.shared_rules_of_thumb, 10000),
+      updated_at: iso(),
+    };
+    return this.writeJson('settings/system.json', next);
   }
 
-  async writeJson(key, value) {
-    await storageService.putObject(key, JSON.stringify(value));
-    return value;
-  }
-
-  getStageOptions() {
-    return COURSE_STAGE_OPTIONS;
-  }
-
-  getStaticContent() {
-    return { parachute: PARACHUTE_BRIEF, practice: SHOPPING_BAG_PRACTICE };
-  }
-
-  async getCurrentStage() {
-    const stored = await this.readJson('course-state/current.json', null);
-    const stageName = stored?.current_stage && COURSE_STAGES[stored.current_stage]
-      ? stored.current_stage
-      : DEFAULT_STAGE;
-    const stage = COURSE_STAGES[stageName];
-    return { current_stage: stageName, ...stage };
-  }
-
-  async setCurrentStage(stageName) {
-    if (!COURSE_STAGES[stageName]) throw makeError('课程阶段无效', 400, 'invalid_stage');
-    return this.writeJson('course-state/current.json', { current_stage: stageName, updated_at: now() });
-  }
-
-  async getParticipantProfile(participantId) {
-    const profile = await this.readJson(`participants/${participantId}.json`, {});
+  async getStudent(studentId) {
+    const saved = await this.readJson(`students/${studentId}.json`, {});
     return {
-      ...profile,
-      participant_id: participantId,
-      group: ['structured', 'autonomous'].includes(profile.group) ? profile.group : null,
+      student_id: studentId,
+      group: GROUPS.includes(saved.group) ? saved.group : 'unassigned',
+      group_assigned_at: saved.group_assigned_at || null,
+      match_pair_id: cleanText(saved.match_pair_id, 100),
+      match_pair_assigned_at: saved.match_pair_assigned_at || null,
+      created_at: saved.created_at || iso(),
+      last_active_at: saved.last_active_at || null,
     };
   }
-
-  async setGroup(participantId, group) {
-    if (!['structured', 'autonomous'].includes(group)) throw makeError('分组无效', 400, 'invalid_group');
-    const profile = await this.getParticipantProfile(participantId);
-    profile.group = group;
-    profile.group_updated_at = now();
-    await this.writeJson(`participants/${participantId}.json`, profile);
-    return profile;
+  async touchStudent(studentId) {
+    const s = await this.getStudent(studentId);
+    if (!s.created_at) s.created_at = iso();
+    s.last_active_at = iso();
+    await this.writeJson(`students/${studentId}.json`, s);
+    return s;
+  }
+  async setGroup(studentId, group, actor = 'admin', confirmAfterFormal = false) {
+    if (!GROUPS.includes(group)) throw err('分组值无效');
+    const formalChat = await this.getChatSession(studentId, 'formal');
+    if (formalChat?.started_at && !confirmAfterFormal) throw err('该学生已经进入正式AI讨论，修改组别需要二次确认。', 409, 'group_confirm_required');
+    const student = await this.getStudent(studentId);
+    const before = student.group;
+    student.group = group;
+    student.group_assigned_at = iso();
+    student.last_active_at = iso();
+    await this.writeJson(`students/${studentId}.json`, student);
+    const log = { student_id: studentId, match_pair_id: student.match_pair_id || '', from: before, to: group, actor, created_at: iso() };
+    await this.writeJson(`group-assignment-log/${Date.now()}_${studentId}.json`, log);
+    return student;
   }
 
-  async getParticipantState(participantId) {
-    const stage = await this.getCurrentStage();
-    const profile = await this.getParticipantProfile(participantId);
-    if (stage.phase === 'ai' && !profile.group) {
-      throw makeError('当前正式AI阶段尚未开放给你的编号，请联系老师。', 409, 'group_required');
+  async setMatching(studentId, { match_pair_id = '', group = 'unassigned' } = {}, actor = 'admin', confirmAfterFormal = false) {
+    if (!GROUPS.includes(group)) throw err('分组值无效');
+    const formalChat = await this.getChatSession(studentId, 'formal');
+    if (formalChat?.started_at && !confirmAfterFormal) throw err('该学生已经进入正式AI讨论，修改匹配或组别需要二次确认。', 409, 'group_confirm_required');
+    const student = await this.getStudent(studentId);
+    const before = { match_pair_id: student.match_pair_id || '', group: student.group };
+    const pair = cleanText(match_pair_id, 100);
+    student.match_pair_id = pair;
+    student.match_pair_assigned_at = pair ? iso() : null;
+    student.group = group;
+    student.group_assigned_at = group === 'unassigned' ? null : iso();
+    student.last_active_at = iso();
+    await this.writeJson(`students/${studentId}.json`, student);
+    await this.writeJson(`group-assignment-log/${Date.now()}_${studentId}.json`, {
+      student_id: studentId,
+      from_match_pair_id: before.match_pair_id,
+      to_match_pair_id: pair,
+      from: before.group,
+      to: group,
+      actor,
+      created_at: iso(),
+    });
+    return student;
+  }
+
+  async getPractice(studentId) {
+    return this.readJson(`practice_sessions/${studentId}.json`, {
+      student_id: studentId, task_type: 'practice', formal_data: false,
+      before_locked: false, chat_completed: false, completed: false,
+      created_at: iso(), updated_at: iso(),
+    });
+  }
+  async lockPracticeBefore(studentId, judgment) {
+    const record = await this.getPractice(studentId);
+    if (record.before_locked) throw err('练习中的首次判断已经锁定，不能覆盖。', 409);
+    const text = cleanText(judgment);
+    if (!text) throw err('请先填写你的判断');
+    Object.assign(record, { practice_judgment_before: text, before_locked: true, before_submitted_at: iso(), updated_at: iso() });
+    return this.writeJson(`practice_sessions/${studentId}.json`, record);
+  }
+  async completePractice(studentId, payload = {}) {
+    const record = await this.getPractice(studentId);
+    if (!record.before_locked) throw err('请先完成练习中的首次判断', 409);
+    if (!record.chat_completed) throw err('请先结束练习AI讨论', 409);
+    const after = cleanText(payload.practice_judgment_after);
+    const decision = cleanText(payload.practice_final_decision);
+    if (!after || !decision) throw err('请完成AI后的判断和最终处理决定');
+    Object.assign(record, { practice_judgment_after: after, practice_final_decision: decision, completed: true, completed_at: iso(), updated_at: iso() });
+    return this.writeJson(`practice_sessions/${studentId}.json`, record);
+  }
+
+  async getV2Evidence(studentId) {
+    const v2 = await this.readJson(`prototype_tests/${studentId}/V2.json`, null);
+    if (v2 && (v2.P2_mean === undefined || v2.P2_mean === null) && v2.mean_descent_time !== undefined) v2.P2_mean = v2.mean_descent_time;
+    return v2;
+  }
+  async saveV2Evidence(studentId, payload = {}) {
+    const existingJudgment = await this.getJudgmentBefore(studentId);
+    if (existingJudgment?.locked) throw err('AI前判断已锁定，V2证据不能再被学生覆盖。', 409);
+    const settings = await this.getSettings();
+    const test = sanitizeTest(payload, settings.number_of_test_trials);
+    const required = [test.test_1, test.test_2].every(v => v !== null) && (settings.number_of_test_trials === 2 || test.test_3 !== null);
+    if (!required) throw err(`请填写${settings.number_of_test_trials}次测试时间`);
+    const current = await this.getV2Evidence(studentId) || { student_id: studentId, version: 'V2', created_at: iso(), photos: [] };
+    Object.assign(current, test, { P2_mean: test.mean_descent_time, updated_at: iso() });
+    await this.writeJson(`prototype_tests/${studentId}/V2.json`, current);
+    await this.ensureFormalSession(studentId);
+    return current;
+  }
+
+  async getJudgmentBefore(studentId) { return this.readJson(`judgments/${studentId}/before.json`, null); }
+  async lockJudgmentBefore(studentId, payload = {}) {
+    const current = await this.getJudgmentBefore(studentId);
+    if (current?.locked) throw err('AI前判断已经提交，原始版本不会被覆盖。', 409);
+    const evidence = await this.getV2Evidence(studentId);
+    if (!evidence) throw err('请先保存V2测试证据', 409);
+    if (!(evidence.photos || []).length) throw err('请先上传至少1张V2照片', 409);
+    const obj = {
+      student_id: studentId,
+      judgment_before_problem: cleanText(payload.judgment_before_problem),
+      judgment_before_evidence: cleanText(payload.judgment_before_evidence),
+      judgment_before_idea: cleanText(payload.judgment_before_idea),
+      locked: true, submitted_at: iso(),
+    };
+    if (!obj.judgment_before_problem || !obj.judgment_before_evidence) throw err('请完成问题判断和证据依据');
+    if (!obj.judgment_before_idea) obj.judgment_before_idea = '不确定/暂时没有';
+    await this.writeJson(`judgments/${studentId}/before.json`, obj);
+    const formal = await this.ensureFormalSession(studentId); formal.formal_started = true; formal.formal_started_at ||= iso(); await this.writeJson(`formal_sessions/${studentId}.json`, formal);
+    return obj;
+  }
+
+  async getDecision(studentId) { return this.readJson(`final_decisions/${studentId}.json`, null); }
+  async lockDecision(studentId, payload = {}) {
+    const old = await this.getDecision(studentId);
+    if (old?.locked) throw err('最终决定已经提交，不能覆盖。', 409);
+    const chat = await this.getChatSession(studentId, 'formal');
+    if (!chat?.ended_at) throw err('请先结束AI讨论', 409);
+    const obj = {
+      student_id: studentId,
+      decision_after_problem: cleanText(payload.decision_after_problem),
+      decision_after_change: cleanText(payload.decision_after_change),
+      decision_after_reason: cleanText(payload.decision_after_reason),
+      decision_after_test: cleanText(payload.decision_after_test),
+      locked: true, submitted_at: iso(),
+    };
+    if (!obj.decision_after_problem || !obj.decision_after_change || !obj.decision_after_reason || !obj.decision_after_test) throw err('请完成全部最终决定字段');
+    await this.writeJson(`final_decisions/${studentId}.json`, obj);
+    return obj;
+  }
+
+  async getV3(studentId) { return this.readJson(`prototype_tests/${studentId}/V3.json`, null); }
+  async saveV3(studentId, payload = {}) {
+    const decision = await this.getDecision(studentId);
+    if (!decision?.locked) throw err('请先提交AI后的最终决定', 409);
+    const old = await this.getV3(studentId);
+    if (old?.locked) throw err('V3最终提交已经锁定，不能覆盖。', 409);
+    if (!(old?.photos || []).length) throw err('请先上传至少1张V3照片', 409);
+    const settings = await this.getSettings();
+    const test = sanitizeTest(payload, settings.number_of_test_trials);
+    const required = [test.test_1, test.test_2].every(v => v !== null) && (settings.number_of_test_trials === 2 || test.test_3 !== null);
+    if (!required) throw err(`请填写${settings.number_of_test_trials}次V3测试时间`);
+    const obj = {
+      ...(old || {}), student_id: studentId, version: 'V3',
+      actual_revision: cleanText(payload.actual_revision),
+      revision_difference: cleanText(payload.revision_difference),
+      ...test,
+      locked: true, submitted_at: iso(), photos: old?.photos || [],
+    };
+    if (!obj.actual_revision) throw err('请填写你实际上修改了哪些地方');
+    await this.writeJson(`prototype_tests/${studentId}/V3.json`, obj);
+    return obj;
+  }
+
+  async getReflection(studentId) { return this.readJson(`reflections/${studentId}.json`, null); }
+  async saveReflection(studentId, payload = {}) {
+    const v3 = await this.getV3(studentId);
+    if (!v3?.locked) throw err('请先提交V3测试结果', 409);
+    const old = await this.getReflection(studentId);
+    if (old?.locked) throw err('反思已经提交，不能覆盖。', 409);
+    const obj = {
+      student_id: studentId,
+      result_match: choice(payload.result_match, ['same','partial','different']),
+      strongest_evidence: cleanText(payload.strongest_evidence),
+      reconsider_next: cleanText(payload.reconsider_next),
+      locked: true, submitted_at: iso(),
+    };
+    if (!obj.result_match || !obj.strongest_evidence || !obj.reconsider_next) throw err('请完成全部反思问题');
+    await this.writeJson(`reflections/${studentId}.json`, obj);
+    const formal = await this.ensureFormalSession(studentId); formal.v3_completed = true; formal.v3_completed_at = iso(); await this.writeJson(`formal_sessions/${studentId}.json`, formal);
+    return obj;
+  }
+
+  async ensureFormalSession(studentId) {
+    const existing = await this.readJson(`formal_sessions/${studentId}.json`, null);
+    if (existing) {
+      existing.research_scores ||= {};
+      for (const key of SCORE_FIELDS) if (!(key in existing.research_scores)) existing.research_scores[key] = null;
+      return existing;
     }
-
-    // 第1课 Shopping Bag 是固定的 AI 流程体验。即使历史课程状态或缓存
-    // 中的 ai_enabled 值异常，也不能把 Practice 误判成“非 AI 阶段”。
-    const isPracticeAi = stage.current_stage === 'practice_shopping_bag'
-      || (stage.formal_data === false && stage.task === 'shopping_bag');
-
-    return {
-      participant_id: participantId,
-      current_stage: stage.current_stage,
-      stage_label: stage.label,
-      task: stage.task,
-      formal_data: stage.formal_data,
-      version: stage.version,
-      phase: stage.phase,
-      ai_enabled: isPracticeAi ? true : Boolean(stage.ai_enabled),
-      group: profile.group,
-      mode: stage.formal_data ? (profile.group || null) : 'practice',
-    };
+    const obj = { student_id: studentId, task_type: 'formal', formal_data: true, formal_started: false, chat_completed: false, v3_completed: false, research_scores: Object.fromEntries(SCORE_FIELDS.map(k => [k, null])), created_at: iso(), updated_at: iso() };
+    await this.writeJson(`formal_sessions/${studentId}.json`, obj); return obj;
   }
-
-  practiceKey(participantId) {
-    return `research/${participantId}/practice-shopping-bag.json`;
-  }
-
-  formalKey(participantId) {
-    return `research/${participantId}/parachute.json`;
-  }
-
-  defaultPracticeRecord(participantId) {
-    return {
-      participant_id: participantId,
-      task: 'shopping_bag',
-      formal_data: false,
-      pre_ai_locked: false,
-      final_decision_locked: false,
-      practice_conversation_id: null,
-      practice_context_sent: false,
-      created_at: now(),
-      updated_at: now(),
-    };
-  }
-
-  defaultFormalRecord(participantId) {
-    return {
-      participant_id: participantId,
-      task: 'parachute',
-      formal_data: true,
-      pre_ai_locked: false,
-      final_decision_locked: false,
-      formal_conversation_id: null,
-      formal_context_sent: false,
-      G0: null,
-      E0: null,
-      H0: null,
-      I0: null,
-      G1: null,
-      E1: null,
-      H1: null,
-      I1: null,
-      Q_V1: null,
-      Q_V2: null,
-      Q_V3: null,
-      created_at: now(),
-      updated_at: now(),
-    };
-  }
-
-  async getRecord(participantId, formalData) {
-    const key = formalData ? this.formalKey(participantId) : this.practiceKey(participantId);
-    const fallback = formalData ? this.defaultFormalRecord(participantId) : this.defaultPracticeRecord(participantId);
-    return this.readJson(key, fallback);
-  }
-
-  getStudentRecord(record) {
-    if (!record) return {};
-    const common = {
-      participant_id: record.participant_id,
-      task: record.task,
-      formal_data: record.formal_data,
-      pre_ai_locked: Boolean(record.pre_ai_locked),
-      pre_ai_locked_at: record.pre_ai_locked_at || null,
-      final_decision_locked: Boolean(record.final_decision_locked),
-      final_decision_locked_at: record.final_decision_locked_at || null,
-    };
-    if (!record.formal_data) {
-      for (const field of PRACTICE_RECORD_FIELDS) common[field] = record[field] ?? '';
-      return common;
+  async patchResearchScores(studentId, scores = {}) {
+    const formal = await this.ensureFormalSession(studentId);
+    formal.research_scores ||= {};
+    for (const key of SCORE_FIELDS) {
+      if (!Object.prototype.hasOwnProperty.call(scores, key)) continue;
+      if (scores[key] === '' || scores[key] === null || scores[key] === undefined) { formal.research_scores[key] = null; continue; }
+      const value = Number(scores[key]);
+      if (!Number.isFinite(value)) throw err(`${key}评分无效`);
+      if (key === 'Q2' && !Q2_ALLOWED_VALUES.includes(value)) throw err('Q2只能填写0、2.5、5、7.5或10');
+      formal.research_scores[key] = value;
     }
-    const visible = [
-      'V2_test_data', 'pre_ai_problem', 'pre_ai_evidence', 'pre_ai_revision_options',
-      'pre_ai_preferred_revision', 'pre_ai_preference_reason', 'post_ai_problem',
-      'post_ai_final_revision', 'post_ai_final_reason'
-    ];
-    for (const field of visible) common[field] = record[field] ?? '';
-    return common;
+    formal.updated_at = iso(); return this.writeJson(`formal_sessions/${studentId}.json`, formal);
   }
 
-  async saveRecord(record) {
-    record.updated_at = now();
-    const key = record.formal_data ? this.formalKey(record.participant_id) : this.practiceKey(record.participant_id);
-    return this.writeJson(key, record);
+  async getChatSession(studentId, scope) {
+    return this.readJson(`chat_sessions/${studentId}/${scope}.json`, null);
   }
-
-  normalizeRecordPayload(payload = {}) {
-    const output = { ...payload };
-    for (const version of ['V1', 'V2', 'V3']) {
-      const key = `${version}_test_data`;
-      if (Object.prototype.hasOwnProperty.call(output, key)) output[key] = sanitizeTestData(output[key]);
+  async ensureChatSession(studentId, scope, mode) {
+    let s = await this.getChatSession(studentId, scope);
+    if (s) return s;
+    s = { student_id: studentId, task_type: scope, mode, session_id: `${scope}_${studentId}_${Date.now()}`, conversation_id: null, started_at: iso(), ended_at: null, chat_duration: null, chat_duration_seconds: null, user_turn_count: 0, assistant_turn_count: 0, context_sent: false, next_message_index: 1, created_at: iso() };
+    await this.writeJson(`chat_sessions/${studentId}/${scope}.json`, s); return s;
+  }
+  async updateChatSession(studentId, scope, patch = {}) {
+    const current = await this.getChatSession(studentId, scope);
+    if (!current) throw err('聊天会话不存在', 404);
+    Object.assign(current, patch, { updated_at: iso() });
+    return this.writeJson(`chat_sessions/${studentId}/${scope}.json`, current);
+  }
+  async endChat(studentId, scope) {
+    const current = await this.getChatSession(studentId, scope);
+    if (!current) throw err('聊天会话不存在', 404);
+    if (!current.ended_at) {
+      current.ended_at = iso();
+      current.chat_duration_seconds = Math.max(0, Math.round((Date.parse(current.ended_at) - Date.parse(current.started_at))/1000));
+      current.chat_duration = current.chat_duration_seconds;
+      await this.writeJson(`chat_sessions/${studentId}/${scope}.json`, current);
     }
-    return output;
-  }
-
-  async saveData(participantId, formalData, payload) {
-    const record = await this.getRecord(participantId, formalData);
-    const normalized = this.normalizeRecordPayload(payload);
-    const dedicatedLockFields = new Set(formalData
-      ? ['pre_ai_problem','pre_ai_evidence','pre_ai_revision_options','pre_ai_preferred_revision','pre_ai_preference_reason','post_ai_problem','post_ai_final_revision','post_ai_final_reason']
-      : PRACTICE_RECORD_FIELDS);
-    const allowedFields = new Set(formalData ? FORMAL_RECORD_FIELDS : []);
-
-    for (const [key, value] of Object.entries(normalized)) {
-      if (!allowedFields.has(key) || dedicatedLockFields.has(key)) continue;
-      if (record.pre_ai_locked && ['V2_test_data'].includes(key)) {
-        throw makeError('AI前记录已锁定，不能再修改V2测试数据', 409, 'pre_ai_locked');
-      }
-      record[key] = value;
-    }
-    return this.saveRecord(record);
-  }
-
-  async lockPreAi(participantId, formalData, payload) {
-    const record = await this.getRecord(participantId, formalData);
-    if (record.pre_ai_locked) throw makeError('AI前判断已经提交，不能再次修改', 409, 'pre_ai_locked');
-
-    if (formalData) {
-      const required = [
-        'pre_ai_problem',
-        'pre_ai_evidence',
-        'pre_ai_revision_options',
-        'pre_ai_preferred_revision',
-        'pre_ai_preference_reason',
-      ];
-      for (const field of required) {
-        if (!String(payload[field] || '').trim()) throw makeError('请先完成全部AI前判断', 400, 'missing_field', { field });
-      }
-      const testData = sanitizeTestData(payload.V2_test_data || record.V2_test_data);
-      if (!testData || [testData.trial_1, testData.trial_2, testData.trial_3].some(v => v === null)) {
-        throw makeError('请先填写3次V2真实测试时间', 400, 'missing_v2_test');
-      }
-      Object.assign(record, {
-        V2_test_data: testData,
-        pre_ai_problem: String(payload.pre_ai_problem).trim(),
-        pre_ai_evidence: String(payload.pre_ai_evidence).trim(),
-        pre_ai_revision_options: String(payload.pre_ai_revision_options).trim(),
-        pre_ai_preferred_revision: String(payload.pre_ai_preferred_revision).trim(),
-        pre_ai_preference_reason: String(payload.pre_ai_preference_reason).trim(),
-      });
+    if (scope === 'practice') {
+      const p = await this.getPractice(studentId); p.chat_completed = true; p.chat_completed_at = current.ended_at; p.updated_at = iso(); await this.writeJson(`practice_sessions/${studentId}.json`, p);
     } else {
-      const required = ['practice_problem', 'practice_evidence', 'practice_initial_revision', 'practice_initial_reason'];
-      for (const field of required) {
-        if (!String(payload[field] || '').trim()) throw makeError('请先完成全部独立判断', 400, 'missing_field', { field });
-      }
-      for (const field of required) record[field] = String(payload[field]).trim();
+      const f = await this.ensureFormalSession(studentId); f.chat_completed = true; f.chat_completed_at = current.ended_at; f.updated_at = iso(); await this.writeJson(`formal_sessions/${studentId}.json`, f);
     }
-
-    record.pre_ai_locked = true;
-    record.pre_ai_locked_at = now();
-    return this.saveRecord(record);
+    return current;
   }
 
-  async lockFinal(participantId, formalData, payload) {
-    const record = await this.getRecord(participantId, formalData);
-    if (!record.pre_ai_locked) throw makeError('请先提交AI前独立判断', 409, 'pre_ai_required');
-    if (record.final_decision_locked) throw makeError('最终决定已经提交，不能再次修改', 409, 'final_decision_locked');
-
-    if ((Number(record.ai_turn_count) || 0) < 1) throw makeError('请至少完成一次AI讨论后再提交最终决定', 409, 'ai_turn_required');
-
-    if (formalData) {
-      const required = ['post_ai_problem', 'post_ai_final_revision', 'post_ai_final_reason'];
-      for (const field of required) {
-        if (!String(payload[field] || '').trim()) throw makeError('请先完成全部最终判断', 400, 'missing_field', { field });
-      }
-      for (const field of required) record[field] = String(payload[field]).trim();
-    } else {
-      const required = ['practice_post_problem', 'practice_post_revision', 'practice_post_reason'];
-      for (const field of required) {
-        if (!String(payload[field] || '').trim()) throw makeError('请先完成AI后的再次判断', 400, 'missing_field', { field });
-      }
-      for (const field of required) record[field] = String(payload[field]).trim();
+  async addMessage(studentId, scope, message) {
+    const session = await this.getChatSession(studentId, scope);
+    if (!session) throw err('聊天会话不存在', 404);
+    const index = session.next_message_index || 1;
+    const record = { ...message, student_id: studentId, task_type: scope, session_id: session.session_id, message_index: index, created_at: message.created_at || iso() };
+    await this.writeJson(`chat_messages/${studentId}/${scope}/${String(index).padStart(5,'0')}.json`, record);
+    session.next_message_index = index + 1;
+    session.user_turn_count = Number(session.user_turn_count || 0) + (record.role === 'user' ? 1 : 0);
+    session.assistant_turn_count = Number(session.assistant_turn_count || 0) + (record.role === 'assistant' ? 1 : 0);
+    session.updated_at = iso(); await this.writeJson(`chat_sessions/${studentId}/${scope}.json`, session);
+    return record;
+  }
+  async getMessages(studentId, scope) {
+    const blobs = await storageService.listObjects(`chat_messages/${studentId}/${scope}/`);
+    const rows = [];
+    for (const b of blobs.sort((a,b)=>a.key.localeCompare(b.key))) {
+      const raw = await storageService.getObject(b.key); if (!raw) continue;
+      try { rows.push(JSON.parse(raw)); } catch {}
     }
-
-    record.final_decision_locked = true;
-    record.final_decision_locked_at = now();
-    return this.saveRecord(record);
+    return rows.sort((a,b)=>(a.message_index||0)-(b.message_index||0));
   }
 
-
-  async adminPatchFormalRecord(participantId, payload = {}) {
-    const record = await this.getRecord(participantId, true);
-    const allowed = new Set([...FORMAL_RECORD_FIELDS, ...SCORE_FIELDS]);
-    const normalized = this.normalizeRecordPayload(payload);
-    for (const [key, value] of Object.entries(normalized)) {
-      if (allowed.has(key)) record[key] = value;
-    }
-    return this.saveRecord(record);
-  }
-
-  async setPhoto(participantId, version, photoMeta) {
-    if (!['V1', 'V2', 'V3'].includes(version)) throw makeError('版本无效', 400, 'invalid_version');
-    const record = await this.getRecord(participantId, true);
-    record[`${version}_photo`] = photoMeta;
-    return this.saveRecord(record);
-  }
-
-  async getPhoto(participantId, version) {
-    const record = await this.getRecord(participantId, true);
-    return record[`${version}_photo`] || null;
-  }
-
-  async incrementAiTurn(participantId, formalData) {
-    const record = await this.getRecord(participantId, formalData);
-    record.ai_turn_count = (Number(record.ai_turn_count) || 0) + 1;
-    record.last_ai_turn_at = now();
-    return this.saveRecord(record);
-  }
-
-  conversationField(formalData) {
-    return formalData ? 'formal_conversation_id' : 'practice_conversation_id';
-  }
-
-  contextSentField(formalData) {
-    return formalData ? 'formal_context_sent' : 'practice_context_sent';
-  }
-
-  async getConversationInfo(participantId, formalData) {
-    const record = await this.getRecord(participantId, formalData);
+  async getStudentState(studentId) {
+    const [settings, student, practice, formal, v2, before, chat, decision, v3, reflection] = await Promise.all([
+      this.getSettings(), this.getStudent(studentId), this.getPractice(studentId), this.ensureFormalSession(studentId), this.getV2Evidence(studentId), this.getJudgmentBefore(studentId), this.getChatSession(studentId,'formal'), this.getDecision(studentId), this.getV3(studentId), this.getReflection(studentId)
+    ]);
+    const v2Ready = Boolean(v2 && v2.test_1 !== null && v2.test_1 !== undefined && v2.test_2 !== null && v2.test_2 !== undefined && (settings.number_of_test_trials === 2 || (v2.test_3 !== null && v2.test_3 !== undefined)));
+    let current_stage = 'home';
+    if (reflection?.locked) current_stage = 'complete';
+    else if (v3?.locked) current_stage = 'reflection';
+    else if (decision?.locked) current_stage = 'v3';
+    else if (chat?.ended_at) current_stage = 'decision';
+    else if (before?.locked) current_stage = 'ai';
+    else if (v2Ready) current_stage = 'judgment_before';
+    else if (formal.formal_started || v2) current_stage = 'formal_v2';
     return {
-      conversation_id: record[this.conversationField(formalData)] || null,
-      context_sent: Boolean(record[this.contextSentField(formalData)]),
+      student_id: studentId,
+      current_stage,
+      practice_completed: Boolean(practice.completed),
+      formal_started: Boolean(formal.formal_started || v2 || before),
+      chat_completed: Boolean(formal.chat_completed || chat?.ended_at),
+      v3_completed: Boolean(formal.v3_completed || reflection?.locked),
+      openings: {
+        practice_open: settings.practice_open,
+        formal_v2_open: settings.formal_v2_open,
+        ai_stage_open: settings.ai_stage_open,
+        v3_submission_open: settings.v3_submission_open,
+      },
+      formal_ai_eligible: ['structured','autonomous'].includes(student.group),
+      number_of_test_trials: settings.number_of_test_trials,
+      max_chat_minutes: settings.max_chat_minutes,
     };
   }
 
-  async setConversationInfo(participantId, formalData, conversationId, contextSent = true) {
-    const record = await this.getRecord(participantId, formalData);
-    record[this.conversationField(formalData)] = conversationId;
-    if (contextSent) record[this.contextSentField(formalData)] = true;
-    return this.saveRecord(record);
+  async buildFormalAiContext(studentId) {
+    const [settings, v2, before] = await Promise.all([this.getSettings(), this.getV2Evidence(studentId), this.getJudgmentBefore(studentId)]);
+    return `${sharedTaskContext(settings)}\n\n【学生自己的V2测试证据】\n${JSON.stringify(v2 || {}, null, 2)}\n\n【学生在AI讨论前锁定的判断】\n${JSON.stringify(before || {}, null, 2)}\n\n请只依据以上已提供信息与学生后续消息交流。不要假设V3结果、不要引用其他学生、不要提及研究组别或研究评分。`;
+  }
+  async buildPracticeAiContext(studentId) {
+    const p = await this.getPractice(studentId);
+    return `【Shopping Bag Failure Practice】\n${SHOPPING_BAG_CASE.evidence.map(x=>`- ${x}`).join('\n')}\n\n【学生讨论前的判断】\n${p.practice_judgment_before || ''}\n\n这是平台练习。请正常连续交流，不要替学生自动填写最终决定。`;
   }
 
-  buildAiContext(formalData, state, record) {
-    if (!formalData) {
-      return [
-        '【平台提供的练习背景｜请把这些内容当作学生已经提交并锁定的真实记录，不要要求学生重新填写】',
-        SHOPPING_BAG_PRACTICE.evidence.join('\n'),
-        `学生最初判断的问题：${record.practice_problem || ''}`,
-        `判断依据：${record.practice_evidence || ''}`,
-        `学生最初准备的修改：${record.practice_initial_revision || ''}`,
-        `最初理由：${record.practice_initial_reason || ''}`,
-      ].join('\n');
-    }
-
-    const test = record.V2_test_data || {};
-    return [
-      '【平台提供的已锁定背景｜这些是学生在AI出现前独立完成的真实记录。不要要求学生重复填写，也不要虚构数据。】',
-      `任务目标：${PARACHUTE_BRIEF.goal}`,
-      `设计标准：${PARACHUTE_BRIEF.criteria.join('；')}`,
-      `限制条件：${PARACHUTE_BRIEF.constraints.join('；')}`,
-      `共同学习过的知识：${PARACHUTE_BRIEF.shared_knowledge.join('；')}`,
-      `V2测试：第1次 ${test.trial_1 ?? '未填'} s；第2次 ${test.trial_2 ?? '未填'} s；第3次 ${test.trial_3 ?? '未填'} s；平均 ${test.mean_descent_time ?? '未计算'} s。`,
-      `V2行为观察：${test.notes || '无补充说明'}`,
-      `学生AI前判断的问题：${record.pre_ai_problem || ''}`,
-      `依据：${record.pre_ai_evidence || ''}`,
-      `想到的修改方法：${record.pre_ai_revision_options || ''}`,
-      `当前最倾向的修改：${record.pre_ai_preferred_revision || ''}`,
-      `选择理由：${record.pre_ai_preference_reason || ''}`,
-    ].join('\n');
+  async addPhoto(studentId, version, meta) {
+    if (!['V2','V3'].includes(version)) throw err('只允许上传V2或V3照片');
+    const key = `prototype_tests/${studentId}/${version}.json`;
+    const current = await this.readJson(key, { student_id: studentId, version, photos: [], created_at: iso() });
+    current.photos ||= [];
+    if (current.photos.length >= 3) throw err('每个版本最多上传3张照片', 409);
+    current.photos.push(meta); current.updated_at = iso(); await this.writeJson(key, current); return current.photos;
   }
 
-  scoreFields() {
-    return SCORE_FIELDS;
+  async getCompleteStudentData(studentId) {
+    const [student, practice, formal, v2, before, formalChat, formalMessages, practiceChat, practiceMessages, decision, v3, reflection] = await Promise.all([
+      this.getStudent(studentId), this.getPractice(studentId), this.ensureFormalSession(studentId), this.getV2Evidence(studentId), this.getJudgmentBefore(studentId), this.getChatSession(studentId,'formal'), this.getMessages(studentId,'formal'), this.getChatSession(studentId,'practice'), this.getMessages(studentId,'practice'), this.getDecision(studentId), this.getV3(studentId), this.getReflection(studentId)
+    ]);
+    return { student, practice: { ...practice, chat_session: practiceChat, chat: practiceMessages }, formal: { session: formal, V2: v2, judgment_before: before, chat_session: formalChat, chat: formalMessages, decision_after: decision, V3: v3, reflection } };
   }
+
+  staticContent() { return { parachute: PARACHUTE_CONTEXT, practice: SHOPPING_BAG_CASE }; }
 }
 
 export const researchService = new ResearchService();

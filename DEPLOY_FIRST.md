@@ -1,27 +1,16 @@
-# 第一次部署/替换步骤
-> **第1课 Practice 必须使用 AI**：Shopping Bag 流程为“案例证据 → 学生独立判断并锁定 → 复用 Autonomous Bot 讨论 → 学生再次判断 → 最终决定”。Practice `formal_data=false`，不进入正式效果统计。
+# 首次部署检查（v5.0）
 
-1. 将本项目上传到 GitHub 分支，建议先用 Preview 分支验证。
-2. EdgeOne 构建目录保持项目根目录，输出目录为 `public`。
-3. 不要移动 `cloud-functions/express/[[default]].js`。
-4. 在 EdgeOne 配置以下环境变量：
-   - `COZE_ACCESS_TOKEN`
-   - `COZE_STRUCTURED_BOT_ID`
-   - `COZE_AUTONOMOUS_BOT_ID`
-   - `ADMIN_PASSWORD`
-   - `ALLOWED_PARTICIPANTS`（例如 `P01,P02,P03`）
-   - `BLOB_STORE_NAME`
-   - `EXPERIMENT_RUN_ID`
-   - `NODE_ENV=production`
-5. 环境变量修改后重新部署。
-6. Preview 验收顺序：
-   - 管理员原密码可以登录
-   - P01可以通过 `/express/api/validate`
-   - Practice 不要求正式group
-   - 正式AI阶段未分组学生会收到 `Participant group not assigned`
-   - 给P01分组后，structured/autonomous 能分别调用对应Bot
-   - AI前提交后不能修改；刷新后记录仍在
-   - AI聊天刷新后恢复同一正式conversation
-   - AI后最终决定提交后聊天关闭
-   - `research_records.csv` 不包含 Practice
-7. Preview全部通过后再合并到 `main`。
+1. GitHub 根目录直接包含 `cloud-functions/`、`public/`、`src/`、`package.json`、`edgeone.json`。
+2. EdgeOne：Other / `./` / `public` / `npm install` / 构建命令留空 / Node 20。
+3. 配置 `.env.example` 中的环境变量；测试可先放 `S001,S002,S003`。
+4. 管理员进入 `/admin.html`：
+   - Practice Open：第1课打开
+   - Formal V2 Evidence：V2录入时打开
+   - AI Stage Open：只在正式AI课打开
+   - V3 Submission Open：制作V3后打开
+5. Practice 后台复用普通/自主 GenAI 配置，学生端统一显示“AI学习助手”；Practice 数据与 Formal 分开。
+6. 正式匹配：先录入/完成 Q2 与 V2测试，核对 P2_mean；Q2优先、P2其次，GEHI只辅助平衡。
+7. 匹配完成后录入 `match_pair_id` 和 `group`。group 未分配时学生不能进入正式AI聊天。
+8. 可在后台批量导入：`S001 pair01 structured` / `S002 pair01 autonomous`；也可先给两人同一 `match_pair_id` 再点“匹配对内随机”。
+9. 正式实验前把 `EXPERIMENT_RUN_ID` 换成新的正式批次名，避免 pilot 数据混入论文数据。
+10. 用真实 Coze 环境至少完成一次 S001 全流程联调，并确认 `chat_duration / user_turn_count / assistant_turn_count` 正常记录。

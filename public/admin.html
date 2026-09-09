@@ -1,42 +1,20 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>研究管理后台 - 设计助手</title>
-  <link rel="stylesheet" href="/css/style.css">
-  <style>
-    .admin-shell{max-width:1240px;margin:auto;padding:26px 20px 60px}.admin-header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:20px}.admin-header h1{margin:0;font-size:28px}.admin-header p{margin:6px 0 0;color:var(--muted);font-size:13px}.admin-actions{display:flex;gap:8px;flex-wrap:wrap}.admin-btn{border:0;border-radius:10px;padding:9px 12px;background:var(--indigo);color:#fff;cursor:pointer;font-weight:650}.admin-btn.secondary{background:#fff;color:var(--body-ink);border:1px solid var(--line)}.stage-bar{display:flex;gap:10px;align-items:center;margin:18px 0;padding:14px;border:1px solid var(--line);border-radius:14px;background:#fff}.stage-bar select{flex:1;min-height:40px;border:1px solid var(--line);border-radius:9px;padding:0 10px}.admin-grid{display:grid;grid-template-columns:360px minmax(0,1fr);gap:18px}.panel{border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:0 8px 24px rgba(24,32,42,.04)}.panel-head{padding:16px 18px;border-bottom:1px solid var(--line);font-weight:750}.participant-list{max-height:calc(100dvh - 210px);overflow:auto}.participant-item{padding:14px 16px;border-bottom:1px solid var(--line);cursor:pointer}.participant-item:hover,.participant-item.active{background:var(--indigo-soft)}.participant-row{display:flex;justify-content:space-between;gap:10px;align-items:center}.pid{font-weight:750}.badge{display:inline-block;margin-left:6px;padding:3px 7px;border-radius:999px;background:#ecefee;color:var(--indigo);font-size:11px}.meta{margin-top:5px;color:var(--muted);font-size:11px}.detail{padding:18px;max-height:calc(100dvh - 210px);overflow:auto}.empty{padding:40px;color:var(--muted);text-align:center}.section{margin-bottom:18px;padding:16px;border:1px solid var(--line);border-radius:14px;background:#fcfcfb}.section h3{margin:0 0 12px;font-size:16px}.section h4{margin:14px 0 8px;font-size:13px;color:var(--indigo)}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.field-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.admin-field label{display:block;margin-bottom:5px;color:var(--muted);font-size:11px;font-weight:700}.admin-field input,.admin-field textarea,.admin-field select{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;font-size:13px}.admin-field textarea{min-height:72px;resize:vertical}.scores{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}.photo-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.photo-status{color:var(--muted);font-size:11px}.log-item{padding:10px 0;border-bottom:1px solid var(--line);font-size:12px;line-height:1.6}.log-item strong{color:var(--indigo)}.save-row{position:sticky;bottom:0;padding:12px 0;background:linear-gradient(to top,#fff 80%,rgba(255,255,255,0));display:flex;justify-content:flex-end}.login-overlay{position:fixed;inset:0;display:grid;place-items:center;background:rgba(24,32,42,.28);z-index:50}.login-box{width:min(360px,calc(100% - 32px));padding:28px;border:1px solid var(--line);border-radius:18px;background:#fff}.login-box h2{margin:0 0 16px}.login-box input{width:100%;min-height:46px;margin-bottom:10px;padding:0 12px;border:1px solid var(--line);border-radius:10px}.login-error{display:none;margin-bottom:10px;color:#b1493e;font-size:13px}@media(max-width:900px){.admin-grid{grid-template-columns:1fr}.participant-list,.detail{max-height:none}.scores{grid-template-columns:repeat(3,1fr)}}
-  </style>
-</head>
-<body class="admin-page">
-  <div class="login-overlay" id="loginOverlay">
-    <div class="login-box">
-      <h2>管理员登录</h2>
-      <div class="login-error" id="loginError"></div>
-      <input type="password" id="adminPassword" placeholder="请输入管理员密码" autocomplete="off">
-      <button class="admin-btn" id="adminLoginBtn" style="width:100%">登录</button>
-    </div>
-  </div>
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>研究管理后台</title><link rel="stylesheet" href="/css/app.css?v=5.0"></head>
+<body>
+<div id="login" class="login-shell"><section class="card login-card"><h1>管理员登录</h1><form id="loginForm" class="form"><input type="password" id="password" placeholder="管理员密码" required><div id="loginError" class="notice warn hidden"></div><button class="btn" style="width:100%">登录</button></form></section></div>
+<div id="app" class="hidden">
+<header class="topbar"><div class="brand">研究管理后台</div><button class="btn secondary" id="logout">退出</button></header>
+<main class="page">
+<section class="card"><span class="eyebrow">研究设置</span><h2>实验阶段开放与共同设置</h2><form class="form" id="settingsForm"><div class="grid two"><label><input type="checkbox" name="practice_open"> Practice Open</label><label><input type="checkbox" name="formal_v2_open"> Formal V2 Evidence Open</label><label><input type="checkbox" name="ai_stage_open"> AI Stage Open</label><label><input type="checkbox" name="v3_submission_open"> V3 Submission Open</label><label>Number of Test Trials<select name="number_of_test_trials"><option value="2">2</option><option value="3">3</option></select></label><label>Max Chat Minutes<input type="number" min="1" max="90" name="max_chat_minutes"></label></div><label>Shared Rules of Thumb<textarea name="shared_rules_of_thumb" placeholder="全班共同形成的设计规律，可留空"></textarea></label><button class="btn">保存研究设置</button></form></section>
 
-  <div class="admin-shell" id="adminContent" hidden>
-    <div class="admin-header">
-      <div><h1>研究数据管理</h1><p>学生端不显示组别、GEHI或评分。这里用于课程阶段、分组、资料补录、评分和导出。</p></div>
-      <div class="admin-actions">
-        <button class="admin-btn secondary" id="exportResearch">研究记录 CSV</button>
-        <button class="admin-btn secondary" id="exportChat">正式聊天 JSONL</button>
-        <button class="admin-btn secondary" id="exportInterview">访谈表 CSV</button>
-        <button class="admin-btn" id="logoutBtn">退出</button>
-      </div>
-    </div>
+<section class="card" style="margin-top:18px"><span class="eyebrow">正式匹配原则</span><h2>Q2优先，P2其次，GEHI仅辅助平衡</h2><p class="small">Q2由研究者人工评分；P2_mean由V2标准化下降时间自动计算。平台不计算Q+P总分、不计算GEHI总分，也不生成baseline_total、matching_score或任何综合分。</p></section>
 
-    <div class="stage-bar"><strong>当前课程阶段</strong><select id="courseStage"></select><button class="admin-btn" id="saveStage">切换阶段</button></div>
+<section class="card" style="margin-top:18px"><span class="eyebrow">导出研究数据</span><div class="export-grid" id="exports"></div></section>
 
-    <div class="admin-grid">
-      <section class="panel"><div class="panel-head">学生名单</div><div class="participant-list" id="participantList"><div class="empty">加载中…</div></div></section>
-      <section class="panel"><div class="panel-head" id="detailTitle">学生资料</div><div class="detail" id="detail"><div class="empty">选择左侧学生查看完整证据链。</div></div></section>
-    </div>
-  </div>
-  <script src="/js/admin.js"></script>
-</body>
-</html>
+<section class="card" style="margin-top:18px"><span class="eyebrow">批量导入匹配与组别</span><p class="small">每行写：<strong>S001 pair01 structured</strong>。三列依次为 student_id / match_pair_id / group；可用空格、Tab或英文逗号分隔。</p><textarea id="bulkText" style="width:100%;min-height:90px" placeholder="S001 pair01 structured&#10;S002 pair01 autonomous"></textarea><button class="btn secondary" id="bulkBtn">批量保存</button></section>
+
+<section class="card" style="margin-top:18px"><span class="eyebrow">学生匹配列表</span><div class="row" style="margin-bottom:12px"><button class="btn secondary" id="sortQ2">按Q2排序</button><button class="btn secondary" id="sortP2">按P2_mean排序</button><button class="btn secondary" id="sortId">按编号排序</button></div><div id="students"></div></section>
+
+<section class="card" id="detail" style="margin-top:18px"><p class="small">点击学生查看完整过程链、录入Q2与匹配信息。</p></section>
+</main></div>
+<script src="/js/common.js?v=5.0"></script><script src="/js/admin.js?v=5.0"></script></body></html>

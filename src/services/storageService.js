@@ -1,108 +1,112 @@
-import { getStore } from '@edgeone/pages-blob';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 
-// 统一存储服务 (使用 EdgeOne Blob)
 class StorageService {
   constructor() {
-    const storeName = process.env.BLOB_STORE_NAME;
-    if (!storeName) {
-      throw new Error('BLOB_STORE_NAME environment variable is required');
-    }
-    this.store = getStore({
-      name: storeName,
-      consistency: 'strong', // 强一致性
-    });
-    // 实验批次前缀
     this.runId = process.env.EXPERIMENT_RUN_ID || 'default';
     this.rootPrefix = `runs/${this.runId}`;
+    this.localRoot = process.env.LOCAL_STORAGE_DIR || path.resolve(process.cwd(), 'data');
+    this.forceLocal = process.env.USE_LOCAL_STORAGE === '1' || process.env.NODE_ENV === 'test';
+    this._store = null;
   }
 
-  // 内部方法：拼接完整路径
-  _getFullPath(path) {
-    // path 应该是相对路径，如 'logs/S01/...'
-    return `${this.rootPrefix}/${path}`;
-  }
-
-  // 写入对象 (content 为字符串或 Buffer)
-  async putObject(path, content) {
-    const fullPath = this._getFullPath(path);
-    let value = content;
-
-    // 如果 content 是 Buffer，转换为 ArrayBuffer (SDK 要求)
-    if (Buffer.isBuffer(content)) {
-      value = content.buffer.slice(
-        content.byteOffset,
-        content.byteOffset + content.byteLength
-      );
+  async blobStore() {
+    if (this.forceLocal) return null;
+    if (this._store) return this._store;
+    const name = process.env.BLOB_STORE_NAME;
+    if (!name) {
+      if (process.env.NODE_ENV !== 'production') return null;
+      throw new Error('BLOB_STORE_NAME environment variable is required');
     }
-
-    try {
-      await this.store.set(fullPath, value);
-    } catch (err) {
-      console.error(`Blob put error: ${fullPath}`, err);
-      throw new Error('存储写入失败');
-    }
+    const { getStore } = await import('@edgeone/pages-blob');
+    this._store = getStore({ name, consistency: 'strong' });
+    return this._store;
   }
 
-  // 读取对象 (返回字符串)
-  async getObject(path) {
-    const fullPath = this._getFullPath(path);
-    try {
-      const result = await this.store.get(fullPath, { type: 'text' });
-      if (result === undefined || result === null) return null;
-      return result;
-    } catch (err) {
-      if (err.message && err.message.includes('not found')) return null;
-      console.error(`Blob get error: ${fullPath}`, err);
-      throw new Error('存储读取失败');
-    }
+  fullKey(key) {
+    return `${this.rootPrefix}/${String(key).replace(/^\/+/, '')}`;
   }
 
-  // 读取对象为 Buffer (图片)
-  async getObjectBuffer(path) {
-    const fullPath = this._getFullPath(path);
-    try {
-      const result = await this.store.get(fullPath, { type: 'arrayBuffer' });
-      if (result === undefined || result === null) return null;
-      return Buffer.from(result);
-    } catch (err) {
-      if (err.message && err.message.includes('not found')) return null;
-      console.error(`Blob get buffer error: ${fullPath}`, err);
-      throw new Error('存储读取失败');
-    }
+  localPath(key) {
+    return path.join(this.localRoot, ...this.fullKey(key).split('/'));
   }
 
-  // 删除对象
-  async deleteObject(path) {
-    const fullPath = this._getFullPath(path);
-    try {
-      await this.store.delete(fullPath);
-    } catch (err) {
-      console.error(`Blob delete error: ${fullPath}`, err);
-      throw new Error('存储删除失败');
+  async putObject(key, content) {
+    const store = await this.blobStore();
+    if (store) {
+      let value = content;
+      if (Buffer.isBuffer(content)) value = content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength);
+      await store.set(this.fullKey(key), value);
+      return;
     }
+    const target = this.localPath(key);
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(target, Buffer.isBuffer(content) ? content : String(content));
   }
 
-  // 列出对象，返回相对当前 run 的 key
-  async listObjects(prefix, limit = 1000) {
-    const fullPrefix = this._getFullPath(prefix);
-    try {
-      const result = await this.store.list({
-        prefix: fullPrefix,
-        limit,
-        consistency: 'strong'
-      });
+  async getObject(key) {
+    const store = await this.blobStore();
+    if (store) {
+      try {
+        const value = await store.get(this.fullKey(key), { type: 'text' });
+        return value ?? null;
+      } catch (err) {
+        if (/not found/i.test(err?.message || '')) return null;
+        throw err;
+      }
+    }
+    try { return await fs.readFile(this.localPath(key), 'utf8'); }
+    catch (err) { if (err.code === 'ENOENT') return null; throw err; }
+  }
+
+  async getObjectBuffer(key) {
+    const store = await this.blobStore();
+    if (store) {
+      try {
+        const value = await store.get(this.fullKey(key), { type: 'arrayBuffer' });
+        return value == null ? null : Buffer.from(value);
+      } catch (err) {
+        if (/not found/i.test(err?.message || '')) return null;
+        throw err;
+      }
+    }
+    try { return await fs.readFile(this.localPath(key)); }
+    catch (err) { if (err.code === 'ENOENT') return null; throw err; }
+  }
+
+  async deleteObject(key) {
+    const store = await this.blobStore();
+    if (store) {
+      try { await store.delete(this.fullKey(key)); } catch (_) {}
+      return;
+    }
+    try { await fs.unlink(this.localPath(key)); } catch (err) { if (err.code !== 'ENOENT') throw err; }
+  }
+
+  async listObjects(prefix = '', limit = 5000) {
+    const store = await this.blobStore();
+    if (store) {
+      const result = await store.list({ prefix: this.fullKey(prefix), limit, consistency: 'strong' });
       const root = `${this.rootPrefix}/`;
-      // 转换返回的 blob key 为相对路径
-      return (result.blobs || []).map(blob => ({
-        ...blob,
-        key: blob.key.startsWith(root)
-          ? blob.key.slice(root.length)
-          : blob.key
-      }));
-    } catch (err) {
-      console.error(`Blob list error: ${fullPrefix}`, err);
-      throw new Error('存储列表失败');
+      return (result.blobs || []).map(item => ({ ...item, key: item.key.startsWith(root) ? item.key.slice(root.length) : item.key }));
     }
+    const rootDir = this.localPath(prefix);
+    const results = [];
+    const walk = async dir => {
+      let entries;
+      try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch (err) { if (err.code === 'ENOENT') return; throw err; }
+      for (const entry of entries) {
+        const p = path.join(dir, entry.name);
+        if (entry.isDirectory()) await walk(p);
+        else {
+          const rel = path.relative(path.join(this.localRoot, ...this.rootPrefix.split('/')), p).split(path.sep).join('/');
+          results.push({ key: rel });
+          if (results.length >= limit) return;
+        }
+      }
+    };
+    await walk(rootDir);
+    return results;
   }
 }
 

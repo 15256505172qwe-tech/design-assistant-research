@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520" role="img" aria-labelledby="title desc">
+<title id="title">Shopping Bag Failure Practice 示意图</title>
+<desc id="desc">购物袋提手连接处在承重测试中发生拉长和撕裂的示意图。</desc>
+<rect width="900" height="520" rx="32" fill="#f5f3ee"/>
+<rect x="210" y="165" width="480" height="270" rx="24" fill="#dfe5ec" stroke="#5c6b7a" stroke-width="6"/>
+<path d="M325 190 C325 70, 430 70, 430 190" fill="none" stroke="#5c6b7a" stroke-width="22" stroke-linecap="round"/>
+<path d="M470 190 C470 70, 575 70, 575 190" fill="none" stroke="#5c6b7a" stroke-width="22" stroke-linecap="round"/>
+<path d="M462 165 l-16 32 18 20 -16 25" fill="none" stroke="#b85d4d" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="458" cy="184" r="34" fill="none" stroke="#b85d4d" stroke-width="5" stroke-dasharray="9 8"/>
+<path d="M505 137 L610 83" stroke="#b85d4d" stroke-width="4"/>
+<rect x="610" y="44" width="220" height="80" rx="18" fill="#fff" stroke="#d7d1c7" stroke-width="3"/>
+<text x="630" y="76" font-family="sans-serif" font-size="24" fill="#333">提手连接处</text>
+<text x="630" y="108" font-family="sans-serif" font-size="24" fill="#b85d4d">拉长并撕裂</text>
+<text x="250" y="482" font-family="sans-serif" font-size="22" fill="#6c737d">示意图只呈现已知失败现象，不直接给出原因或修改答案。</text>
+</svg>

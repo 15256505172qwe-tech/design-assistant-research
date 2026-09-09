@@ -1,207 +1,40 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { sessionService } from '../services/sessionService.js';
 import { cozeService } from '../services/cozeService.js';
-import { logService } from '../services/logService.js';
-import { storageService } from '../services/storageService.js';
 import { researchService } from '../services/researchService.js';
-import { validateMessage, validateParticipantId } from '../utils/validators.js';
+import { isAllowedStudent, normalizeStudentId, validateMessage } from '../utils/validators.js';
+const router=express.Router();
+const iso=()=>new Date().toISOString();
+function sendErr(res,e){res.status(e.status||500).json({error:e.message||'聊天服务暂时不可用'});}
 
-const router = express.Router();
-
-function allowedParticipant(participantId) {
-  if (!validateParticipantId(participantId)) return false;
-  return (process.env.ALLOWED_PARTICIPANTS || '')
-    .split(',')
-    .map(s => s.trim().toUpperCase())
-    .filter(Boolean)
-    .includes(participantId);
+async function modeFor(id,scope){ if(scope==='practice') return 'practice'; const s=await researchService.getStudent(id); if(!['structured','autonomous'].includes(s.group)) throw Object.assign(new Error('AI讨论尚未为你的编号开放，请联系老师。'),{status:409}); return s.group; }
+async function requireReady(id,scope){
+ const settings=await researchService.getSettings();
+ if(scope==='practice') { if(!settings.practice_open) throw Object.assign(new Error('这一部分还没有开放，请根据老师安排继续课堂活动。'),{status:409}); const p=await researchService.getPractice(id); if(!p.before_locked) throw Object.assign(new Error('请先提交并锁定你自己的判断。'),{status:409}); if(p.completed) throw Object.assign(new Error('练习已经完成。'),{status:409}); return settings; }
+ if(!settings.ai_stage_open) throw Object.assign(new Error('这一部分还没有开放，请根据老师安排继续课堂活动。'),{status:409});
+ const before=await researchService.getJudgmentBefore(id); if(!before?.locked) throw Object.assign(new Error('请先记录并锁定AI讨论前的判断。'),{status:409});
+ const decision=await researchService.getDecision(id); if(decision?.locked) throw Object.assign(new Error('最终决定已经提交，本次AI讨论已结束。'),{status:409}); return settings;
 }
 
-function imageMimeFromName(name = '') {
-  const ext = name.split('.').pop()?.toLowerCase();
-  return ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' })[ext] || 'image/jpeg';
-}
+router.get('/chat/state', async(req,res)=>{try{const id=normalizeStudentId(req.query.studentId),scope=req.query.scope==='practice'?'practice':'formal'; if(!isAllowedStudent(id))return res.status(403).json({error:'编号无效'}); const settings=await requireReady(id,scope); const mode=await modeFor(id,scope); let session=await researchService.getChatSession(id,scope); const messages=await researchService.getMessages(id,scope); res.json({scope,session,messages,max_chat_minutes:settings.max_chat_minutes,can_start:!session,ended:Boolean(session?.ended_at)});}catch(e){sendErr(res,e)}});
 
-router.post('/chat', async (req, res) => {
-  const requestStartedAt = new Date().toISOString();
-  const { participantId, sessionId, message, imageId } = req.body || {};
-  const upperId = String(participantId || '').toUpperCase().trim();
+router.post('/chat/start', async(req,res)=>{try{const id=normalizeStudentId(req.body?.studentId),scope=req.body?.scope==='practice'?'practice':'formal';if(!isAllowedStudent(id))return res.status(403).json({error:'编号无效'});const settings=await requireReady(id,scope);const mode=await modeFor(id,scope);const session=await researchService.ensureChatSession(id,scope,mode);res.json({session,max_chat_minutes:settings.max_chat_minutes});}catch(e){sendErr(res,e)}});
 
-  if (!upperId || !sessionId || !message) return res.status(400).json({ error: '缺少必要参数' });
-  if (!allowedParticipant(upperId)) return res.status(403).json({ error: '未授权的参与者' });
-  if (!validateMessage(message)) return res.status(400).json({ error: '消息内容为空或过长' });
+router.post('/chat', async(req,res)=>{try{
+ const id=normalizeStudentId(req.body?.studentId),scope=req.body?.scope==='practice'?'practice':'formal',message=String(req.body?.message||''),clientMessageId=String(req.body?.clientMessageId||'');
+ if(!isAllowedStudent(id))return res.status(403).json({error:'编号无效'}); if(!validateMessage(message))return res.status(400).json({error:'消息为空或过长'});
+ const settings=await requireReady(id,scope); const mode=await modeFor(id,scope); let session=await researchService.ensureChatSession(id,scope,mode);
+ if(session.ended_at)return res.status(409).json({error:'本次AI讨论已经结束。'});
+ const elapsed=Math.floor((Date.now()-Date.parse(session.started_at))/1000); if(elapsed>=settings.max_chat_minutes*60){ await researchService.endChat(id,scope); return res.status(409).json({error:'本次讨论时间已结束，请进入下一步记录你的最终决定。',time_up:true}); }
+ const existingMessages=await researchService.getMessages(id,scope);if(!existingMessages.some(m=>m.role==='user'&&m.client_message_id&&m.client_message_id===clientMessageId)){await researchService.addMessage(id,scope,{message_id:`local_${uuidv4()}`,client_message_id:clientMessageId||`generated_${uuidv4()}`,role:'user',content:message,created_at:iso(),group:mode==='practice'?'':mode});}
+ let prompt=message; if(!session.context_sent){ prompt=`${scope==='practice'?await researchService.buildPracticeAiContext(id):await researchService.buildFormalAiContext(id)}\n\n【学生当前消息】\n${message}`; }
+ const ai=await cozeService.sendMessage({studentId:id,sessionId:session.session_id,scope,mode,conversationId:session.conversation_id,message:prompt});
+ await researchService.addMessage(id,scope,{message_id:ai.message_id||`assistant_${uuidv4()}`,role:'assistant',content:ai.assistant_message,created_at:iso(),conversation_id:ai.conversation_id,chat_id:ai.chat_id,bot_id:ai.bot_id,group:mode==='practice'?'':mode});
+ session=await researchService.updateChatSession(id,scope,{conversation_id:ai.conversation_id,context_sent:true});
+ const elapsedAfter=Math.floor((Date.now()-Date.parse(session.started_at))/1000); const timeUp=elapsedAfter>=settings.max_chat_minutes*60;
+ if(timeUp) session=await researchService.endChat(id,scope);
+ res.json({message:ai.assistant_message,conversation_id:ai.conversation_id,time_up:timeUp,elapsed_seconds:elapsedAfter});
+ }catch(e){console.error('chat',e);sendErr(res,e)}});
 
-  const session = await sessionService.getSession(sessionId);
-  if (!session || session.active === false || session.participant_id !== upperId) {
-    return res.status(404).json({ error: '会话不存在或已过期' });
-  }
-
-  let state;
-  let record;
-  try {
-    state = await researchService.getParticipantState(upperId);
-    if (!state.ai_enabled) return res.status(409).json({ error: '当前课程阶段不开放AI，请按老师安排完成活动。' });
-    record = await researchService.getRecord(upperId, state.formal_data);
-    if (!record.pre_ai_locked) return res.status(409).json({ error: '请先完成并提交AI前独立判断。' });
-    if (record.final_decision_locked) return res.status(409).json({ error: '最终决定已经提交，本轮AI对话已结束。' });
-  } catch (err) {
-    return res.status(err.status || 500).json({ error: err.message || '读取研究状态失败' });
-  }
-
-  const mode = state.formal_data ? state.group : 'practice';
-  const scope = state.formal_data ? 'formal' : 'practice';
-  let imageBuffer = null;
-  let imageMime = null;
-
-  try {
-    if (imageId) {
-      const imagePath = `images/${upperId}/${sessionId}/${imageId}`;
-      const buffer = await storageService.getObjectBuffer(imagePath);
-      if (!buffer) throw Object.assign(new Error('image_unavailable'), { code: 'image_unavailable' });
-      imageBuffer = Buffer.from(buffer);
-      imageMime = imageMimeFromName(imageId);
-    }
-
-    const conversationInfo = await researchService.getConversationInfo(upperId, state.formal_data);
-    let messageForAi = message;
-    let contextInjected = false;
-    if (!conversationInfo.context_sent) {
-      messageForAi = `${researchService.buildAiContext(state.formal_data, state, record)}\n\n【学生当前消息】\n${message}`;
-      contextInjected = true;
-      if (!imageBuffer && state.formal_data && record.V2_photo?.path) {
-        const buffer = await storageService.getObjectBuffer(record.V2_photo.path);
-        if (buffer) {
-          imageBuffer = Buffer.from(buffer);
-          imageMime = record.V2_photo.mime || imageMimeFromName(record.V2_photo.filename || 'photo.jpg');
-        }
-      }
-    }
-
-    const result = await cozeService.sendMessage({
-      participantId: upperId,
-      sessionId,
-      mode,
-      scope,
-      message: messageForAi,
-      conversationId: conversationInfo.conversation_id,
-      imageBuffer,
-      imageMime,
-    });
-
-    await researchService.setConversationInfo(upperId, state.formal_data, result.conversation_id, contextInjected || conversationInfo.context_sent);
-    await researchService.incrementAiTurn(upperId, state.formal_data);
-    await sessionService.incrementTurn(sessionId);
-    const updatedSession = await sessionService.getSession(sessionId);
-    const turnNumber = updatedSession.turn_count;
-    const fullResponseSeconds = Math.round((Date.parse(result.answer_time) - Date.parse(requestStartedAt)) / 100) / 10;
-    const eventId = `event_${Date.now()}_${uuidv4().replace(/-/g, '')}`;
-
-    await logService.logInteraction({
-      event_id: eventId,
-      experiment_run_id: process.env.EXPERIMENT_RUN_ID || 'default',
-      participant_id: upperId,
-      group: state.group || '',
-      mode,
-      task: state.task,
-      formal_data: state.formal_data,
-      current_stage: state.current_stage,
-      conversation_scope: scope,
-      bot_id: result.bot_id,
-      session_id: sessionId,
-      conversation_session_id: session.conversation_session_id || sessionId,
-      conversation_session_no: session.conversation_session_no || 1,
-      conversation_id: result.conversation_id,
-      chat_id: result.chat_id,
-      turn_number: turnNumber,
-      user_message: message,
-      assistant_message: result.assistant_message,
-      request_started_at: requestStartedAt,
-      send_time: result.send_time,
-      answer_time: result.answer_time,
-      response_seconds: fullResponseSeconds,
-      status: result.status,
-      has_image: Boolean(imageBuffer),
-      image_id: imageId || (record.V2_photo?.filename || ''),
-      context_injected: contextInjected,
-    });
-
-    res.json({
-      success: true,
-      message: result.assistant_message,
-      chatId: result.chat_id,
-      conversationId: result.conversation_id,
-    });
-  } catch (err) {
-    console.error('Chat error:', err);
-    const now = new Date().toISOString();
-    const errorCode = err.code || (err.message === 'timeout' ? 'timeout' : 'failed');
-    const errorMessage = err.code === 'image_unavailable'
-      ? '图片读取失败，请重新上传后再发送。'
-      : err.message === 'timeout'
-        ? '回复超时，请重试。'
-        : '回复失败，请重试。';
-
-    try {
-      await logService.logInteraction({
-        event_id: `error_${Date.now()}_${uuidv4().replace(/-/g, '')}`,
-        experiment_run_id: process.env.EXPERIMENT_RUN_ID || 'default',
-        participant_id: upperId,
-        group: state?.group || '',
-        mode: state?.formal_data ? state.group : 'practice',
-        task: state?.task || '',
-        formal_data: Boolean(state?.formal_data),
-        current_stage: state?.current_stage || '',
-        conversation_scope: state?.formal_data ? 'formal' : 'practice',
-        bot_id: state ? cozeService.getBotId(state.formal_data ? state.group : 'practice') : '',
-        session_id: sessionId,
-        conversation_id: 'unknown',
-        chat_id: `error_${Date.now()}`,
-        turn_number: (session.turn_count || 0) + 1,
-        user_message: message,
-        assistant_message: '',
-        request_started_at: requestStartedAt,
-        send_time: requestStartedAt,
-        answer_time: now,
-        response_seconds: Math.round((Date.parse(now) - Date.parse(requestStartedAt)) / 100) / 10,
-        status: 'failed',
-        has_image: Boolean(imageBuffer),
-        image_id: imageId || '',
-        error_code: errorCode,
-        error_message: err.message,
-      });
-    } catch (logErr) {
-      console.error('Error logging failed interaction:', logErr);
-    }
-    res.status(500).json({ error: errorMessage });
-  }
-});
-
-router.get('/history', async (req, res) => {
-  try {
-    const upperId = String(req.query?.participantId || '').toUpperCase().trim();
-    const sessionId = String(req.query?.sessionId || '');
-    if (!upperId || !sessionId) return res.status(400).json({ error: '缺少参数' });
-    if (!allowedParticipant(upperId)) return res.status(403).json({ error: '未授权' });
-
-    const session = await sessionService.getSession(sessionId);
-    if (!session || session.active === false || session.participant_id !== upperId) return res.status(404).json({ error: '会话不存在' });
-    const state = await researchService.getParticipantState(upperId);
-    const scope = state.formal_data ? 'formal' : 'practice';
-    const logs = (await logService.getParticipantLogs(upperId))
-      .filter(log => log.status === 'completed' && log.conversation_scope === scope)
-      .sort((a, b) => new Date(a.send_time) - new Date(b.send_time));
-
-    const messages = [];
-    for (const log of logs) {
-      if (log.user_message) messages.push({ role: 'user', content: log.user_message });
-      if (log.assistant_message) messages.push({ role: 'assistant', content: log.assistant_message });
-    }
-    res.json({ messages });
-  } catch (err) {
-    console.error('History error:', err);
-    res.status(err.status || 500).json({ error: err.message || '获取历史记录失败' });
-  }
-});
-
+router.post('/chat/end', async(req,res)=>{try{const id=normalizeStudentId(req.body?.studentId),scope=req.body?.scope==='practice'?'practice':'formal';if(!isAllowedStudent(id))return res.status(403).json({error:'编号无效'});await requireReady(id,scope);res.json({session:await researchService.endChat(id,scope)});}catch(e){sendErr(res,e)}});
 export default router;

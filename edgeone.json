@@ -1,10 +1,1 @@
-{
-  "installCommand": "npm install",
-  "outputDirectory": "public",
-  "nodeVersion": "20.18.0",
-  "cloudFunctions": {
-    "nodejs": {
-      "maxDuration": 90
-    }
-  }
-}
+{"installCommand":"npm install","outputDirectory":"public","nodeVersion":"20.18.0","cloudFunctions":{"nodejs":{"maxDuration":90}}}
