@@ -376,8 +376,20 @@ $('v2PhotoInput').addEventListener('change', async function () {
 async function init() {
   try {
     await loadResearchState();
-    if (!state.research.ai_enabled) return renderNonAiStage();
-    if (state.research.formal_data) renderFormal(); else renderPractice();
+
+    // 第1课必须完整体验“独立判断 → 锁定 → 普通AI讨论 → 再判断 → 最终决定”。
+    // Practice 不能因为旧状态/缓存中的 ai_enabled 异常而落入非AI占位页。
+    const isPracticeAi = state.research.current_stage === 'practice_shopping_bag'
+      || (state.research.formal_data === false && state.research.task === 'shopping_bag');
+
+    if (isPracticeAi) {
+      state.research.ai_enabled = true;
+      renderPractice();
+    } else {
+      if (!state.research.ai_enabled) return renderNonAiStage();
+      renderFormal();
+    }
+
     if (state.record.final_decision_locked) return showCompleted();
     if (state.record.pre_ai_locked) return openChat();
     $('preAiForm').hidden = false;

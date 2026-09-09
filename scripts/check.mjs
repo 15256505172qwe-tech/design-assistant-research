@@ -43,6 +43,19 @@ for (const expected of ["app.use('/api', authRoutes)", "app.use('/api', chatRout
 const mainJs = readFileSync(join(root,'public/js/main.js'),'utf8');
 if (!mainJs.includes("'/express/api/validate'")) { failed = true; console.error('Student validate endpoint is not /express/api/validate'); }
 
+
+const researchConfig = readFileSync(join(root,'src/config/researchConfig.js'),'utf8');
+if (!/practice_shopping_bag[\s\S]*?formal_data:\s*false[\s\S]*?ai_enabled:\s*true/.test(researchConfig)) {
+  failed = true;
+  console.error('Practice must remain formal_data=false and ai_enabled=true');
+}
+const researchService = readFileSync(join(root,'src/services/researchService.js'),'utf8');
+const studentChat = readFileSync(join(root,'public/js/chat.js'),'utf8');
+if (!researchService.includes("stage.current_stage === 'practice_shopping_bag'") || !studentChat.includes("state.research.current_stage === 'practice_shopping_bag'")) {
+  failed = true;
+  console.error('Practice AI hard guard is missing');
+}
+
 const validator = readFileSync(join(root,'src/utils/validators.js'),'utf8');
 if (!validator.includes('/^P\\d{2}$/')) { failed = true; console.error('Participant validator is not P01-P99'); }
 

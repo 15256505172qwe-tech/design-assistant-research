@@ -1,4 +1,5 @@
 # 第一次部署/替换步骤
+> **第1课 Practice 必须使用 AI**：Shopping Bag 流程为“案例证据 → 学生独立判断并锁定 → 复用 Autonomous Bot 讨论 → 学生再次判断 → 最终决定”。Practice `formal_data=false`，不进入正式效果统计。
 
 1. 将本项目上传到 GitHub 分支，建议先用 Preview 分支验证。
 2. EdgeOne 构建目录保持项目根目录，输出目录为 `public`。

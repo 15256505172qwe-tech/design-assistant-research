@@ -100,6 +100,12 @@ class ResearchService {
     if (stage.phase === 'ai' && !profile.group) {
       throw makeError('当前正式AI阶段尚未开放给你的编号，请联系老师。', 409, 'group_required');
     }
+
+    // 第1课 Shopping Bag 是固定的 AI 流程体验。即使历史课程状态或缓存
+    // 中的 ai_enabled 值异常，也不能把 Practice 误判成“非 AI 阶段”。
+    const isPracticeAi = stage.current_stage === 'practice_shopping_bag'
+      || (stage.formal_data === false && stage.task === 'shopping_bag');
+
     return {
       participant_id: participantId,
       current_stage: stage.current_stage,
@@ -108,7 +114,7 @@ class ResearchService {
       formal_data: stage.formal_data,
       version: stage.version,
       phase: stage.phase,
-      ai_enabled: stage.ai_enabled,
+      ai_enabled: isPracticeAi ? true : Boolean(stage.ai_enabled),
       group: profile.group,
       mode: stage.formal_data ? (profile.group || null) : 'practice',
     };

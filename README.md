@@ -1,4 +1,5 @@
 # 设计助手（Model Parachute 研究版）
+> **第1课 Practice 必须使用 AI**：Shopping Bag 流程为“案例证据 → 学生独立判断并锁定 → 复用 Autonomous Bot 讨论 → 学生再次判断 → 最终决定”。Practice `formal_data=false`，不进入正式效果统计。
 
 这是基于已验证可工作的 EdgeOne/Express 架构重建的研究平台版本。核心原则是：**不改动稳定的 EdgeOne Functions 入口，只在其上增加研究业务逻辑。**
 
