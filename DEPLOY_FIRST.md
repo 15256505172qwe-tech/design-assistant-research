@@ -1,16 +1,17 @@
-# 首次部署检查（v6.0）
+# V9 首次部署检查
 
-1. GitHub 根目录直接包含 `cloud-functions/`、`public/`、`src/`、`package.json`、`edgeone.json`。
-2. EdgeOne：Other / `./` / `public` / `npm install` / 构建命令留空 / Node 20。
-3. 配置 `.env.example` 中的环境变量；测试可先放 `P01,P02,P03`。
-4. 管理员进入 `/admin.html`：
-   - Practice Open：第1课打开
-   - Formal V2 Evidence：V2录入时打开
-   - AI Stage Open：只在正式AI课打开
-   - V3 Submission Open：制作V3后打开
-5. Practice 后台复用普通/自主 GenAI 配置，学生端统一显示“AI学习助手”；Practice 数据与 Formal 分开。
-6. 正式匹配：先录入/完成 Q2 与 V2测试，核对 P2_mean；Q2优先、P2其次，GEHI只辅助平衡。
-7. 匹配完成后录入 `match_pair_id` 和 `group`。group 未分配时学生不能进入正式AI聊天。
-8. 可在后台批量导入：`P01 pair01 structured` / `P02 pair01 autonomous`；也可先给两人同一 `match_pair_id` 再点“匹配对内随机”。
-9. 正式实验前把 `EXPERIMENT_RUN_ID` 换成新的正式批次名，避免 pilot 数据混入论文数据。
-10. 用真实 Coze 环境至少完成一次 P01 全流程联调，并确认 `chat_duration / user_turn_count / assistant_turn_count` 正常记录。
+1. 解压 v9 ZIP，完整覆盖 GitHub 项目文件。
+2. 确认仓库根目录直接存在 `public/`、`src/`、`cloud-functions/`、`package.json`、`edgeone.json`。
+3. 腾讯云继续使用原项目环境变量；新增 `COZE_MODEL_NAME` 可选。
+4. `ALLOWED_PARTICIPANTS` 推荐填 P01–P28。v9 默认原生允许 P01–P28；只有 `STRICT_PARTICIPANT_ALLOWLIST=1` 才严格按环境变量白名单限制。
+5. EdgeOne：Root `./`；Output `public`；Install `npm install`；Build 可留空或 `npm run build`。
+6. 部署后管理员先设置：Practice、Round1、Round2 开关；formal_round_count；test_repeat_count；max_chat_minutes；enable_self_verification。
+7. 点击“创建/补齐 P01–P28”。
+8. 正式研究前分配每人的 condition：scaffold / regular。
+9. 导师演示时点击“创建 DEMO-S / DEMO-R”；正式导出默认排除 demo。
+10. 用 P01 完整跑 Round1；若 formal_round_count=2，再开放 Round2 测试。
+11. 确认 Round2 自动读取 V2 复测证据，不要求重新录入。
+12. 确认聊天没有固定轮数上限；时间到后才停止继续输入。
+13. 确认学生端不出现 condition、实验组/对照组、G/E/H/I、IDTLM 等研究术语。
+14. 检查管理员可查看：图片、锁定回答、完整聊天、实际修改、复测、反思。
+15. 下载 CSV/JSON，确认默认不含 DEMO-S / DEMO-R。

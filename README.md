@@ -1,166 +1,163 @@
-# 设计助手｜硕士论文研究实验平台 v6.0
+# Design Assistant Research Platform v9
 
-研究主题：**《生成式AI支架对初中生原型迭代的影响研究》**。
+用于《生成式AI支架对初中生原型迭代的影响研究》的课堂实验与数据采集平台。
 
-## 研究流程
+## 1. 技术结构
 
-- 第1课 `Shopping Bag Failure Practice`：只做平台与AI流程练习，不评分、不随机分组、不进入正式研究统计。学生端始终显示“AI学习助手”，Practice 只是后台复用普通 GenAI 配置，不是第三个研究条件。
-- 正式任务：学生在线下已完成 V1→V2 无AI自主迭代；平台正式数据从 **V2证据** 开始。
-- 正式AI只发生一次：**V2证据 → AI前独立判断并锁定 → AI多轮讨论 → AI后学生自己作最终决定 → V3 → V3复测与反思**。
-- 正式两组：`structured` / `autonomous`。学生端界面、共同知识、时间窗口和功能完全一致，唯一差异是服务器选择的 Coze Bot ID / 对应人设。
+沿用 v8：
 
-## 最新正式匹配逻辑
+- 前端：HTML / CSS / JavaScript
+- 后端：Node.js 20 + Express
+- 部署：GitHub → Tencent EdgeOne Pages / Node Functions
+- 数据与图片：EdgeOne Blob（本地测试可使用文件存储）
+- AI：Coze API
 
-学生完成 V2 后，`group` 初始仍为 `unassigned`。匹配顺序为：
+没有改成新的前端框架，也没有把 Token 放到浏览器。
 
-1. **Q2**：V2产品设计质量，首要匹配变量，由研究者人工评分；只允许 `0 / 2.5 / 5 / 7.5 / 10`。
-2. **P2_mean**：V2标准化下降任务表现的平均下降时间，由平台根据 `test_1/test_2/test_3` 自动计算并保存，同时保留每次原始时间。
-3. **G0/E0/H0/I0**：仅当 Q2、P2 接近时用于辅助平衡。
+## 2. v9 正式流程
 
-平台**不会**计算：
+默认 `formal_round_count=2`：
 
-- Q+P总分
-- GEHI总分
-- baseline_total
-- matching_score
-- weighted_score
-- 任何自动综合匹配分
+- Round 1：V1证据 → 初始判断锁定 → AI → 最终作答锁定 → 其他方案事实记录 → V2修改 → 可选自主验证 → V2复测 → 反思
+- Round 2：自动继承V2证据 → 初始判断锁定 → 同一condition AI → 最终作答锁定 → 其他方案事实记录 → V3修改 → 可选自主验证 → V3复测 → 最终反思
 
-研究者完成匹配后，可在后台录入 `match_pair_id` 和 `group`；也可批量导入 `student_id / match_pair_id / group`。后台还提供可选“匹配对内随机”：仅在一个 `match_pair_id` 正好对应2人时，将两人随机分到 structured / autonomous。
+若后台把 `formal_round_count` 设为 1，Round 2 不显示。
 
-**group=unassigned 的学生即使 AI Stage 已开放，也不能进入正式AI聊天页。** 学生端不会显示组别或匹配变量。
+## 3. Practice
 
-## 干预保真度
+只有 Shopping Bag Failure Practice。
 
-Formal chat session 持续记录：
+学生先填写：
 
-- `chat_duration`（秒）
-- `chat_duration_seconds`
-- `user_turn_count`
-- `assistant_turn_count`
-- `conversation_id`
-- `session_id`
+1. 下一版准备怎么改及理由；
+2. 主要依据什么测试现象或信息。
 
-刷新页面后仍恢复同一会话和已有消息。
+锁定后进入所有学生相同的普通 AI 体验。Practice 不进入正式统计。
 
-## 页面
+## 4. 参与者编号与 condition
 
-- `/` 学生登录
-- `/home.html` 当前任务
-- `/practice.html` Shopping Bag Practice
-- `/formal.html` V2证据 + AI前判断
-- `/chat.html?scope=formal` 正式AI聊天（左证据栏/右聊天）
-- `/decision.html` AI后最终决定
-- `/v3.html` V3实际修改、测试和反思
-- `/complete.html` 完成页
-- `/admin.html` 教师/研究者后台
+正式编号：`P01`–`P28`。
 
-## 数据结构
+数据库主字段：`participant_id`。
 
-平台使用 EdgeOne Blob（本地调试时使用 `data/`）并按对象拆分：
+正式 condition：
 
-- `students/`（含 group / match_pair_id）
-- `practice_sessions/`
-- `formal_sessions/`（含 Q2、GEHI研究评分）
-- `prototype_tests/`（V2同时保存原始时间、`mean_descent_time` 与 `P2_mean`）
-- `judgments/`
-- `chat_sessions/`
-- `chat_messages/`
-- `final_decisions/`
-- `reflections/`
-- `uploads/`
-- `settings/`
-- `group-assignment-log/`
+- `scaffold`
+- `regular`
+- `unassigned`
 
-## 环境变量
+学生端永远不显示 condition。
 
-复制 `.env.example` 为 `.env`（本地）或在 EdgeOne 项目设置中添加：
+导师演示：
+
+- `DEMO-S`：scaffold
+- `DEMO-R`：regular
+
+Demo 数据默认不进入正式导出。
+
+## 5. Coze 环境变量
+
+腾讯云需要配置：
 
 ```text
 COZE_ACCESS_TOKEN=
 COZE_STRUCTURED_BOT_ID=
 COZE_AUTONOMOUS_BOT_ID=
+COZE_MODEL_NAME=
 ADMIN_PASSWORD=
-ALLOWED_PARTICIPANTS=P01,P02,P03
+ALLOWED_PARTICIPANTS=P01,...,P28
 BLOB_STORE_NAME=design-assistant-research-data
-EXPERIMENT_RUN_ID=pilot01
+EXPERIMENT_RUN_ID=pilot-v9
 NODE_ENV=production
+STRICT_PARTICIPANT_ALLOWLIST=0
 ```
 
-长期部署建议使用 Coze 服务访问令牌 SAT。Token 只能放在服务器环境变量，不能写入前端或 GitHub。
+### Bot 对应
 
-为避免与腾讯云现有配置混淆，本版只使用以上三个 Coze 环境变量名。
+- `COZE_STRUCTURED_BOT_ID` → scaffold 条件
+- `COZE_AUTONOMOUS_BOT_ID` → regular 条件，同时用于 Practice 普通 AI
 
-## 本地运行
+两个正式 Bot 必须在 Coze 端使用相同底层模型、共同知识、时间条件和工具权限；平台无法从外部强制修改 Bot 内部模型，所以请在 Coze 发布前人工核对。
 
-Node.js 20+：
+`COZE_MODEL_NAME` 仅用于把当前统一模型名称写入研究日志，可留空。
+
+## 6. 本地运行
 
 ```bash
 npm install
-cp .env.example .env
+npm run build
 npm start
 ```
 
-无需真实 Coze 联调时可使用：
+打开：`http://localhost:3000`
+
+管理员：`http://localhost:3000/admin.html`
+
+## 7. EdgeOne 部署
+
+- Framework Preset：Other
+- Root Directory：`./`
+- Output Directory：`public`
+- Install Command：`npm install`
+- Build Command：可留空，或 `npm run build`
+- Node：20.x（仓库 `edgeone.json` 指定 20.18.0）
+
+Node Function 保持：
+
+`cloud-functions/express/[[default]].js`
+
+前端请求后端使用 `/express/api/...`。
+
+## 8. 数据存储
+
+v9 新研究数据使用版本化路径：
 
 ```text
-COZE_MOCK=1
-USE_LOCAL_STORAGE=1
+runs/<EXPERIMENT_RUN_ID>/v9/...
 ```
 
-## EdgeOne 部署
+包括：
 
-GitHub → EdgeOne：
+- Practice
+- V1/V2/V3 证据和照片
+- Round1 / Round2 初始判断
+- Round1 / Round2 聊天 session 与逐条 message
+- 最终作答
+- alternative fact record
+- 实际修改
+- 自主验证
+- 复测与反思
 
-- Framework：Other
-- Root：`./`
-- Output：`public`
-- Install：`npm install`
-- Build：留空
-- Node：20.x
-- Function 入口：`cloud-functions/express/[[default]].js`
+v8 原数据仍保留在旧路径，不会被 v9 粗暴覆盖；完整 JSON 中提供 `legacy_v8` 只读字段。
 
-前端统一调用 `/express/api/...`。
+## 9. 图片
 
-## 管理后台
+只允许 JPG / JPEG / PNG / WEBP，单张最大 10MB。V1、V2、V3 每个版本 1–3 张。
 
-后台可：
+没有视频上传功能。
 
-- 开关 Practice / Formal V2 / 正式AI / V3提交
-- 设置测试次数 2/3、最大聊天时间、Shared Rules of Thumb
-- 查看学生匹配列表：`student_id / Q2 / P2_mean / G0 / E0 / H0 / I0 / match_pair_id / group`
-- 按 Q2 或 P2_mean 排序
-- 人工录入 Q2 和 GEHI（学生不可见）
-- 手工录入 `match_pair_id` 与 group
-- 批量导入 `student_id / match_pair_id / group`
-- 可选匹配对内随机
-- 查看单个学生完整过程链、AI逐轮消息、V2/V3图片
-- 查看 `chat_duration / user_turn_count / assistant_turn_count`
-- 导出单个学生JSON或全部数据
+## 10. 数据导出
 
-## 数据导出
+管理员后台支持：
 
-后台提供：
+- participants.csv
+- formal_rounds.csv
+- chat_messages.csv
+- practice.csv
+- 全部正式 JSON
+- 单个参与者 JSON
 
-- `students.csv`
-- `matching.csv`
-- `practice.csv`
-- `practice_chat_messages.csv`
-- `V2_evidence.csv`（含 `P2_mean` 与原始测试时间）
-- `judgment_before.csv`
-- `chat_messages.csv`
-- `chat_sessions.csv`（含聊天时长与轮次数）
-- `decision_after.csv`
-- `V3_results.csv`
-- `reflection.csv`
-- `research_scores.csv`
-- `research_all.json`
-- 单个学生 JSON
+默认排除 `is_demo=true` 的导师演示数据。
 
-## 图片
+## 11. 聊天控制
 
-V2/V3各要求至少1张、最多3张 JPG/JPEG/PNG/WEBP，单张最大10MB。图片写入 Blob / 本地存储，不只保留浏览器临时URL。
+- 无固定轮数限制；超过 8 次学生发言也不会被平台截断。
+- 唯一硬时间上限：`max_chat_minutes`。
+- 保存 `user_turn_count`、`assistant_turn_count`、`chat_duration_seconds`，仅作过程/干预保真度记录。
+- 同一轮保持同一个 Coze `conversation_id`，刷新后平台聊天记录可恢复。
 
-## 连续AI多轮
+## 12. 安全
 
-同一个 Practice 或 Formal AI 会话只创建一次 Coze `conversation_id`，后续消息继续使用同一 conversation。Formal 聊天前服务器根据 group 选择对应 Bot；Practice 复用普通/自主 GenAI Bot，但学生端只显示“AI学习助手”。
+`.env`、Token、真实 Bot ID、管理员密码不得上传 GitHub。
+
+`.gitignore` 已排除：`.env`、`node_modules`、本地 data/uploads、SQLite/db 文件。

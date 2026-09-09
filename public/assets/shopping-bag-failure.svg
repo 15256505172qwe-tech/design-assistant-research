@@ -1,15 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520" role="img" aria-labelledby="title desc">
-<title id="title">Shopping Bag Failure Practice 示意图</title>
-<desc id="desc">购物袋提手连接处在承重测试中发生拉长和撕裂的示意图。</desc>
-<rect width="900" height="520" rx="32" fill="#f5f3ee"/>
-<rect x="210" y="165" width="480" height="270" rx="24" fill="#dfe5ec" stroke="#5c6b7a" stroke-width="6"/>
-<path d="M325 190 C325 70, 430 70, 430 190" fill="none" stroke="#5c6b7a" stroke-width="22" stroke-linecap="round"/>
-<path d="M470 190 C470 70, 575 70, 575 190" fill="none" stroke="#5c6b7a" stroke-width="22" stroke-linecap="round"/>
-<path d="M462 165 l-16 32 18 20 -16 25" fill="none" stroke="#b85d4d" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="458" cy="184" r="34" fill="none" stroke="#b85d4d" stroke-width="5" stroke-dasharray="9 8"/>
-<path d="M505 137 L610 83" stroke="#b85d4d" stroke-width="4"/>
-<rect x="610" y="44" width="220" height="80" rx="18" fill="#fff" stroke="#d7d1c7" stroke-width="3"/>
-<text x="630" y="76" font-family="sans-serif" font-size="24" fill="#333">提手连接处</text>
-<text x="630" y="108" font-family="sans-serif" font-size="24" fill="#b85d4d">拉长并撕裂</text>
-<text x="250" y="482" font-family="sans-serif" font-size="22" fill="#6c737d">示意图只呈现已知失败现象，不直接给出原因或修改答案。</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="620" viewBox="0 0 1000 620" role="img" aria-labelledby="title desc">
+<title id="title">Shopping Bag 承重后提手连接处失效的课堂证据图</title>
+<desc id="desc">一个装有书本作为载荷的纸质购物袋，一侧提手从袋身连接处脱开，袋身其他部分基本完整；右侧有连接处的放大观察。</desc>
+<rect width="1000" height="620" rx="34" fill="#f6f4ef"/>
+<text x="62" y="62" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="25" font-weight="700" fill="#344a78">承重后观察</text>
+<text x="62" y="96" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" fill="#747b84">只看已经发生的现象，先不要急着判断原因。</text>
+<!-- bag body -->
+<path d="M150 215 Q150 190 178 190 H510 Q538 190 538 215 L570 515 Q573 546 542 546 H146 Q115 546 118 515 Z" fill="#d9b779" stroke="#695b48" stroke-width="5"/>
+<path d="M135 330 H555" stroke="#c89e5d" stroke-width="3" opacity=".55"/>
+<!-- books/weights -->
+<rect x="184" y="367" width="310" height="44" rx="7" fill="#5b7199"/><rect x="202" y="416" width="292" height="42" rx="7" fill="#8e9a7d"/><rect x="168" y="463" width="326" height="40" rx="7" fill="#a86e61"/>
+<text x="289" y="396" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="17" fill="white">统一载荷</text>
+<!-- intact left handle -->
+<path d="M220 220 C220 90 330 90 330 220" fill="none" stroke="#544a3f" stroke-width="19" stroke-linecap="round"/>
+<rect x="207" y="198" width="48" height="55" rx="8" fill="#cda76a" stroke="#695b48" stroke-width="4"/>
+<!-- failed right handle with detached end -->
+<path d="M390 220 C390 95 500 92 505 202" fill="none" stroke="#544a3f" stroke-width="19" stroke-linecap="round"/>
+<path d="M505 202 C520 215 530 235 524 255" fill="none" stroke="#544a3f" stroke-width="19" stroke-linecap="round"/>
+<rect x="455" y="198" width="48" height="55" rx="8" fill="#cda76a" stroke="#695b48" stroke-width="4"/>
+<path d="M484 212 l15 10 -12 11 16 9 -10 12" fill="none" stroke="#b55b4e" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M522 255 L548 286" stroke="#b55b4e" stroke-width="6" stroke-linecap="round"/>
+<!-- callout -->
+<circle cx="486" cy="229" r="50" fill="none" stroke="#b55b4e" stroke-width="4" stroke-dasharray="9 8"/>
+<path d="M531 199 C615 150 647 150 694 164" fill="none" stroke="#b55b4e" stroke-width="4"/>
+<circle cx="794" cy="232" r="132" fill="#fff" stroke="#ded9d0" stroke-width="4"/>
+<path d="M733 276 L746 170 H842 L832 284 Z" fill="#d9b779" stroke="#695b48" stroke-width="4"/>
+<rect x="766" y="174" width="48" height="58" rx="8" fill="#cda76a" stroke="#695b48" stroke-width="4"/>
+<path d="M790 180 C792 122 842 120 852 164" fill="none" stroke="#544a3f" stroke-width="15" stroke-linecap="round"/>
+<path d="M852 164 C862 184 857 211 840 229" fill="none" stroke="#544a3f" stroke-width="15" stroke-linecap="round"/>
+<path d="M794 188 l13 9 -11 10 15 9 -10 13" fill="none" stroke="#b55b4e" stroke-width="6" stroke-linecap="round"/>
+<text x="687" y="405" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="23" font-weight="700" fill="#2a2e34">一侧提手从连接处脱开</text>
+<text x="703" y="440" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" fill="#707780">袋身其他位置基本保持完整</text>
+<rect x="62" y="560" width="876" height="1" fill="#ddd9d2"/>
+<text x="62" y="592" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#858b91">课堂证据图：依据 Shopping Bag failure case 的已知失效现象重新绘制；图中不提供原因或修改答案。</text>
 </svg>

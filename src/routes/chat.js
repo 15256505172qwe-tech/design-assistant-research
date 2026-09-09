@@ -2,39 +2,30 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { cozeService } from '../services/cozeService.js';
 import { researchService } from '../services/researchService.js';
-import { isAllowedStudent, normalizeStudentId, validateMessage } from '../utils/validators.js';
-const router=express.Router();
-const iso=()=>new Date().toISOString();
-function sendErr(res,e){res.status(e.status||500).json({error:e.message||'聊天服务暂时不可用'});}
+import { isAllowedParticipant, normalizeParticipantId, validateMessage } from '../utils/validators.js';
+import { PROMPT_VERSION } from '../config/researchConfig.js';
+const router=express.Router();const iso=()=>new Date().toISOString();const sendErr=(res,e)=>res.status(e.status||500).json({error:e.message||'聊天服务暂时不可用',code:e.code});
+const publicSession=s=>s?{session_id:s.session_id,started_at:s.started_at,ended_at:s.ended_at,chat_duration_seconds:s.chat_duration_seconds,user_turn_count:s.user_turn_count||0,assistant_turn_count:s.assistant_turn_count||0,locked:Boolean(s.locked)}:null;
+const publicMessages=rows=>rows.map(m=>({message_index:m.message_index,message_id:m.message_id,role:m.role,content:m.content,created_at:m.created_at}));
 
-async function modeFor(id,scope){ if(scope==='practice') return 'practice'; const s=await researchService.getStudent(id); if(!['structured','autonomous'].includes(s.group)) throw Object.assign(new Error('AI讨论尚未为你的编号开放，请联系老师。'),{status:409}); return s.group; }
-async function requireReady(id,scope){
- const settings=await researchService.getSettings();
- if(scope==='practice') { if(!settings.practice_open) throw Object.assign(new Error('这一部分还没有开放，请根据老师安排继续课堂活动。'),{status:409}); const p=await researchService.getPractice(id); if(!p.before_locked) throw Object.assign(new Error('请先提交并锁定你自己的判断。'),{status:409}); if(p.completed) throw Object.assign(new Error('练习已经完成。'),{status:409}); return settings; }
- if(!settings.ai_stage_open) throw Object.assign(new Error('这一部分还没有开放，请根据老师安排继续课堂活动。'),{status:409});
- const before=await researchService.getJudgmentBefore(id); if(!before?.locked) throw Object.assign(new Error('请先记录并锁定AI讨论前的判断。'),{status:409});
- const decision=await researchService.getDecision(id); if(decision?.locked) throw Object.assign(new Error('最终决定已经提交，本次AI讨论已结束。'),{status:409}); return settings;
+async function access(id,scope){
+  if(scope==='practice'){const settings=await researchService.getSettings(),p=await researchService.getPractice(id);if(!settings.practice_open)throw Object.assign(new Error('这一部分还没有开放，请根据老师安排继续课堂活动。'),{status:409});if(!p.before_locked)throw Object.assign(new Error('请先提交练习中的两个回答。'),{status:409});return{mode:'practice',settings};}
+  const round=scope==='round2'?2:1,a=await researchService.formalChatAccess(id,round);if(!a.eligible)throw Object.assign(new Error(a.reason),{status:409});return{mode:a.condition,settings:a.settings,round};
 }
 
-router.get('/chat/state', async(req,res)=>{try{const id=normalizeStudentId(req.query.studentId),scope=req.query.scope==='practice'?'practice':'formal'; if(!isAllowedStudent(id))return res.status(403).json({error:'编号无效'}); const settings=await requireReady(id,scope); const mode=await modeFor(id,scope); let session=await researchService.getChatSession(id,scope); const messages=await researchService.getMessages(id,scope); res.json({scope,session,messages,max_chat_minutes:settings.max_chat_minutes,can_start:!session,ended:Boolean(session?.ended_at)});}catch(e){sendErr(res,e)}});
+router.get('/chat/state',async(req,res)=>{try{const id=normalizeParticipantId(req.query.participantId??req.query.studentId),scope=['practice','round1','round2'].includes(req.query.scope)?req.query.scope:'round1';if(!isAllowedParticipant(id))return res.status(403).json({error:'编号无效'});const a=await access(id,scope),s=await researchService.getChatSession(id,scope),messages=await researchService.getMessages(id,scope);res.json({scope,session:publicSession(s),messages:publicMessages(messages),max_chat_minutes:a.settings.max_chat_minutes,context:scope==='practice'?null:await researchService.contextForChat(id,scope)});}catch(e){sendErr(res,e);}});
 
-router.post('/chat/start', async(req,res)=>{try{const id=normalizeStudentId(req.body?.studentId),scope=req.body?.scope==='practice'?'practice':'formal';if(!isAllowedStudent(id))return res.status(403).json({error:'编号无效'});const settings=await requireReady(id,scope);const mode=await modeFor(id,scope);const session=await researchService.ensureChatSession(id,scope,mode);res.json({session,max_chat_minutes:settings.max_chat_minutes});}catch(e){sendErr(res,e)}});
+router.post('/chat/open',async(req,res)=>{try{
+  const id=normalizeParticipantId(req.body?.participantId??req.body?.studentId),scope=['practice','round1','round2'].includes(req.body?.scope)?req.body.scope:'round1';if(!isAllowedParticipant(id))return res.status(403).json({error:'编号无效'});const a=await access(id,scope);let s=await researchService.ensureChatSession(id,scope,{condition:a.mode,bot_id:cozeService.botId(a.mode),prompt_version:PROMPT_VERSION,model:cozeService.modelName()});if(s.locked)return res.status(409).json({error:'本轮AI讨论已经结束。'});const existing=await researchService.getMessages(id,scope);if(existing.length)return res.json({session:publicSession(s),messages:publicMessages(existing)});
+  if(!s.started_at)s.started_at=iso();const context=await researchService.contextForChat(id,scope),ai=await cozeService.sendMessage({participantId:id,sessionId:s.session_id,scope,mode:a.mode,conversationId:s.conversation_id,message:context});s.conversation_id=ai.conversation_id;s.bot_id=ai.bot_id;s.model=ai.model;s.opening_sent=true;s.assistant_turn_count=(s.assistant_turn_count||0)+1;await researchService.saveChatSession(id,scope,s);await researchService.appendMessage(id,scope,{message_id:ai.message_id||uuidv4(),role:'assistant',content:ai.assistant_message,conversation_id:ai.conversation_id,chat_id:ai.chat_id,bot_id:ai.bot_id,prompt_version:PROMPT_VERSION,model:ai.model});res.json({message:ai.assistant_message,session:publicSession(s)});
+}catch(e){console.error('chat open',e);sendErr(res,e);}});
 
-router.post('/chat', async(req,res)=>{try{
- const id=normalizeStudentId(req.body?.studentId),scope=req.body?.scope==='practice'?'practice':'formal',message=String(req.body?.message||''),clientMessageId=String(req.body?.clientMessageId||'');
- if(!isAllowedStudent(id))return res.status(403).json({error:'编号无效'}); if(!validateMessage(message))return res.status(400).json({error:'消息为空或过长'});
- const settings=await requireReady(id,scope); const mode=await modeFor(id,scope); let session=await researchService.ensureChatSession(id,scope,mode);
- if(session.ended_at)return res.status(409).json({error:'本次AI讨论已经结束。'});
- const elapsed=Math.floor((Date.now()-Date.parse(session.started_at))/1000); if(elapsed>=settings.max_chat_minutes*60){ await researchService.endChat(id,scope); return res.status(409).json({error:'本次讨论时间已结束，请进入下一步记录你的最终决定。',time_up:true}); }
- const existingMessages=await researchService.getMessages(id,scope);if(!existingMessages.some(m=>m.role==='user'&&m.client_message_id&&m.client_message_id===clientMessageId)){await researchService.addMessage(id,scope,{message_id:`local_${uuidv4()}`,client_message_id:clientMessageId||`generated_${uuidv4()}`,role:'user',content:message,created_at:iso(),group:mode==='practice'?'':mode});}
- let prompt=message; if(!session.context_sent){ prompt=`${scope==='practice'?await researchService.buildPracticeAiContext(id):await researchService.buildFormalAiContext(id)}\n\n【学生当前消息】\n${message}`; }
- const ai=await cozeService.sendMessage({studentId:id,sessionId:session.session_id,scope,mode,conversationId:session.conversation_id,message:prompt});
- await researchService.addMessage(id,scope,{message_id:ai.message_id||`assistant_${uuidv4()}`,role:'assistant',content:ai.assistant_message,created_at:iso(),conversation_id:ai.conversation_id,chat_id:ai.chat_id,bot_id:ai.bot_id,group:mode==='practice'?'':mode});
- session=await researchService.updateChatSession(id,scope,{conversation_id:ai.conversation_id,context_sent:true});
- const elapsedAfter=Math.floor((Date.now()-Date.parse(session.started_at))/1000); const timeUp=elapsedAfter>=settings.max_chat_minutes*60;
- if(timeUp) session=await researchService.endChat(id,scope);
- res.json({message:ai.assistant_message,conversation_id:ai.conversation_id,time_up:timeUp,elapsed_seconds:elapsedAfter});
- }catch(e){console.error('chat',e);sendErr(res,e)}});
+router.post('/chat/send',async(req,res)=>{try{
+  const id=normalizeParticipantId(req.body?.participantId??req.body?.studentId),scope=['practice','round1','round2'].includes(req.body?.scope)?req.body.scope:'round1',message=String(req.body?.message||'');if(!isAllowedParticipant(id))return res.status(403).json({error:'编号无效'});if(!validateMessage(message))return res.status(400).json({error:'请输入要发送的内容。'});const a=await access(id,scope);let s=await researchService.ensureChatSession(id,scope,{condition:a.mode,bot_id:cozeService.botId(a.mode),prompt_version:PROMPT_VERSION,model:cozeService.modelName()});if(s.locked)return res.status(409).json({error:'本轮AI讨论已经结束。'});if(!s.started_at)s.started_at=iso();const elapsed=Math.floor((Date.now()-Date.parse(s.started_at))/1000);if(elapsed>=a.settings.max_chat_minutes*60){s=await researchService.endChat(id,scope);return res.status(409).json({error:'本次讨论时间已结束，请进入下一步记录你的最终决定。',time_up:true,session:publicSession(s)});}
+  await researchService.appendMessage(id,scope,{message_id:uuidv4(),role:'user',content:message,conversation_id:s.conversation_id,bot_id:s.bot_id,prompt_version:PROMPT_VERSION,model:s.model});s.user_turn_count=(s.user_turn_count||0)+1;await researchService.saveChatSession(id,scope,s);
+  const ai=await cozeService.sendMessage({participantId:id,sessionId:s.session_id,scope,mode:a.mode,conversationId:s.conversation_id,message});s.conversation_id=ai.conversation_id;s.bot_id=ai.bot_id;s.model=ai.model;s.assistant_turn_count=(s.assistant_turn_count||0)+1;await researchService.saveChatSession(id,scope,s);await researchService.appendMessage(id,scope,{message_id:ai.message_id||uuidv4(),role:'assistant',content:ai.assistant_message,conversation_id:ai.conversation_id,chat_id:ai.chat_id,bot_id:ai.bot_id,prompt_version:PROMPT_VERSION,model:ai.model});
+  const elapsedAfter=Math.floor((Date.now()-Date.parse(s.started_at))/1000),timeUp=elapsedAfter>=a.settings.max_chat_minutes*60;if(timeUp)s=await researchService.endChat(id,scope);res.json({message:ai.assistant_message,time_up:timeUp,elapsed_seconds:elapsedAfter,user_turn_count:s.user_turn_count||0,assistant_turn_count:s.assistant_turn_count||0,session:publicSession(s)});
+}catch(e){console.error('chat send',e);sendErr(res,e);}});
 
-router.post('/chat/end', async(req,res)=>{try{const id=normalizeStudentId(req.body?.studentId),scope=req.body?.scope==='practice'?'practice':'formal';if(!isAllowedStudent(id))return res.status(403).json({error:'编号无效'});await requireReady(id,scope);res.json({session:await researchService.endChat(id,scope)});}catch(e){sendErr(res,e)}});
+router.post('/chat/end',async(req,res)=>{try{const id=normalizeParticipantId(req.body?.participantId??req.body?.studentId),scope=['practice','round1','round2'].includes(req.body?.scope)?req.body.scope:'round1';if(!isAllowedParticipant(id))return res.status(403).json({error:'编号无效'});await access(id,scope);res.json({session:publicSession(await researchService.endChat(id,scope))});}catch(e){sendErr(res,e);}});
 export default router;

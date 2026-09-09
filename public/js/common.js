@@ -1,9 +1,10 @@
-const API='/express/api';
-function sid(){return sessionStorage.getItem('student_id')||''}
-function requireStudent(){const id=sid();if(!id){location.href='/';throw new Error('no student');}return id}
-async function api(path,opts={}){const r=await fetch(API+path,{credentials:'same-origin',headers:{...(opts.body instanceof FormData?{}:{'Content-Type':'application/json'}),...(opts.headers||{})},...opts});let data={};try{data=await r.json()}catch{}if(!r.ok)throw Object.assign(new Error(data.error||data.message||'请求失败'),{status:r.status,data});return data}
-function escapeHtml(v=''){return String(v).replace(/[&<>"]/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[s]))}
-function setStudentTag(){const e=document.querySelector('[data-student-tag]');if(e)e.textContent=sid()}
-function confirmLock(text){return confirm(text)}
-function trialInputs(prefix,count=3,values={}){return Array.from({length:count},(_,i)=>`<label>第${i+1}次（秒）<input type="number" step="0.01" min="0" name="${prefix}_${i+1}" value="${values[`${prefix}_${i+1}`]??''}" required></label>`).join('')}
-window.App={API,sid,requireStudent,api,escapeHtml,setStudentTag,confirmLock,trialInputs};
+window.App={
+  apiBase:'/express/api',
+  participantId(){return sessionStorage.getItem('participant_id')||sessionStorage.getItem('student_id')||''},
+  setParticipantId(id){sessionStorage.setItem('participant_id',id);sessionStorage.removeItem('student_id')},
+  async api(path,options={}){const r=await fetch(this.apiBase+path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});let data={};try{data=await r.json()}catch{}if(!r.ok){const e=new Error(data.error||data.message||'操作失败');e.data=data;e.status=r.status;throw e}return data},
+  escapeHtml(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))},
+  requireParticipant(){const id=this.participantId();if(!id){location.href='/';throw new Error('no participant')}document.querySelectorAll('[data-participant-tag],[data-student-tag]').forEach(x=>x.textContent=id);return id},
+  evidenceHtml(v={}){const p=v.performance||{},o=v.observations||{},labels={yes:'是',no:'否',unsure:'不确定',none:'没有',some:'有一点',strong:'很明显',partial:'部分时间'};return `<div class="evidence-box"><div class="photo-grid">${(v.photos||[]).map(x=>`<a target="_blank" href="/express/api/image/${this.participantId()}/${v.version}/${encodeURIComponent(x.file_name)}"><img src="/express/api/image/${this.participantId()}/${v.version}/${encodeURIComponent(x.file_name)}"></a>`).join('')}</div><div class="evidence-list" style="margin-top:14px"><div>测试1：<strong>${p.test_1??'—'}</strong></div><div>测试2：<strong>${p.test_2??'—'}</strong></div>${p.test_3!=null?`<div>测试3：<strong>${p.test_3}</strong></div>`:''}<div>平均值：<strong>${p.mean_descent_time??'—'}</strong></div><div>正常展开：${labels[o.opened]||'—'}</div><div>摇摆：${labels[o.sway]||'—'}</div><div>旋转：${labels[o.rotation]||'—'}</div><div>水平漂移：${labels[o.drift]||'—'}</div><div>伞面稳定：${labels[o.stable_canopy]||'—'}</div></div>${o.other_observation?`<p class="small">其他观察：${this.escapeHtml(o.other_observation)}</p>`:''}</div>`},
+  confirmLock(message='提交后将锁定这份记录，不能由学生覆盖。确定提交吗？'){return window.confirm(message)}
+};

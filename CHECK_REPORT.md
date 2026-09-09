@@ -1,53 +1,34 @@
-# 最终检查报告｜v5.0 匹配逻辑更新版
+# V9 交付检查报告
 
-本包基于上一版 checked 项目，仅更新正式匹配/分组逻辑及相关后台与导出；两个 Coze 智能体调用逻辑、人设入口、共同上下文和学生端同构界面未改。
+检查日期：2026-09-09
 
-## 本次已落实
+## 已通过
 
-- Q2 为首要匹配变量，研究者后台人工录入；仅允许 `0 / 2.5 / 5 / 7.5 / 10`。
-- P2_mean 由 V2 原始下降时间自动计算并保存；原始 `test_1/test_2/test_3` 继续保留。
-- G0/E0/H0/I0 仅作为后台辅助平衡信息。
-- 不存在 Q+P 总分、GEHI 总分、baseline_total、matching_score、weighted_score 等综合匹配分。
-- 新学生 group 默认 `unassigned`。
-- 后台支持 `match_pair_id` + group 手工录入。
-- 后台支持批量导入 `student_id / match_pair_id / group`。
-- 后台提供可选“匹配对内随机”，仅在同一 match_pair_id 正好2人时进行 structured/autonomous 随机分配。
-- 管理员列表显示 `student_id / Q2 / P2_mean / G0 / E0 / H0 / I0 / match_pair_id / group`，支持 Q2、P2_mean 排序。
-- group 未分配时，即使 AI Stage Open，学生端不会提供正式AI入口；直接访问正式聊天页也会被重定向/服务器拒绝。
-- 学生 API 不返回 structured/autonomous 组别值，只返回是否具备正式AI资格的布尔状态；学生界面不显示组别、Q2、P2、GEHI 或匹配信息。
-- 第1课学生端统一称“AI学习助手”；没有“Base AI”名称。Practice 后台复用普通/自主 GenAI 配置，但不是第三个研究条件。
-- Formal chat session 保留并验证：`chat_duration`、`chat_duration_seconds`、`user_turn_count`、`assistant_turn_count`。
-- 新增 `matching.csv` 与 `chat_sessions.csv` 导出；V2_evidence.csv 明确保留 `P2_mean` 和全部原始测试时间。
-- 静态资源版本号提升至 `v5.0`，降低 EdgeOne/CDN 继续加载旧 JS/CSS 的风险。
+- `npm run check`：通过；25 个 JS/MJS 文件全部通过 Node 语法检查。
+- `npm run build`：通过；本项目无前端编译步骤，build 脚本执行完整静态/业务约束检查。
+- `npm test`：通过。
+- Smoke test 已完整覆盖：Practice → Round1 V1证据 → AI前锁定 → 10个学生发言轮次记录 → AI结束 → 最终决定 → alternative → V2修改 → 自主验证 → V2复测 → Round1反思 → Round2自动继承V2证据 → 第二轮AI → V3修改 → V3复测 → 最终反思 → 完成。
+- Smoke test 明确模拟 10 个学生发言轮次，验证不存在“8轮上限”或固定轮次结束条件。
+- Demo：DEMO-S=scaffold、DEMO-R=regular 通过。
+- Round2 沿用 participant.condition，不存在第二次随机。
+- v9 新数据使用 `v9/...` 版本化存储路径；v8 数据保留为 `legacy_v8`，不会粗暴覆盖。
+- V1/V2/V3 照片只支持图片，1–3张，上传路由支持 JPG/PNG/WEBP，单张10MB。
+- 正式导出逻辑默认排除 demo。
+- 学生前台扫描未发现 Structured、Autonomous、实验组、对照组、G0/E0/H0/I0、IDTLM、Troubleshoot 等研究术语。
+- 未发现 `max_chat_turns`、`turn_limit`、`matching_score`、`baseline_total`、`GEHI_total`。
 
-## 已执行检查
+## npm install
 
-- `npm run check`：**通过**。25 个 JS/MJS 文件语法与关键研究约束检查通过。
-- `npm test`：**通过**。本地存储 + Mock Coze 完整跑通：Practice → V2 → Q2/P2匹配 → AI前锁定 → 连续两轮正式AI → AI后决定 → V3 → 反思。
-- Smoke test 验证：
-  - P2_mean = V2原始测试平均值；
-  - 非法 Q2（如6）会被拒绝；
-  - `match_pair_id` 与正式 group 正常保存；
-  - Formal conversation_id 多轮保持不变；
-  - user_turn_count / assistant_turn_count 正确累计；
-  - chat_duration 正常保存；
-  - Structured / Autonomous Bot 路由正确；
-  - Practice 复用 Autonomous/普通 GenAI Bot 路由。
-- 两个正式智能体的 `cozeService.js` **未修改**。
+在当前隔离执行环境中两次执行 `npm install --no-audit --no-fund` 均因外部 npm 网络访问超时，无法完成真实依赖下载。这不是代码报错。仓库依赖声明保持 v8 已使用的 Express/Axios/Multer/EdgeOne Blob 组合；部署环境仍需正常联网执行 `npm install`。
 
-## 线上仍需最终验证
+## 无法在本环境替代的真实联调
 
-离线环境无法代替你的真实账号完成：
+以下项目依赖你的腾讯云/Coze账户，必须部署后做最后一次线上验收：
 
-1. EdgeOne 实际部署与 Blob 权限；
-2. Coze SAT 权限；
-3. 两个已发布 Bot ID 的真实调用；
-4. 管理后台“匹配对内随机”在线接口与 UI；
-5. 用至少两个测试编号完成一次：V2 → Q2录入 → match_pair_id → 分组 → 正式AI → 导出 `matching.csv` / `chat_sessions.csv`。
+- 真实 Coze SAT 是否有效；
+- 两个已发布 Bot ID 是否可调用；
+- 两只正式 Bot 是否确实配置同一底层模型与共同知识；
+- EdgeOne Blob 真实写入/图片读取；
+- EdgeOne Node Function 线上请求时限。
 
-尝试执行 `npm install` 时当前容器网络超时，因此未完成真实依赖下载；但 `npm run check` 与不依赖在线 Coze/外部包的 Mock smoke 测试均已通过。EdgeOne 部署会按 `npm install` 安装依赖。
-
-## v6.0 编号与环境变量统一
-- 学生编号统一为 `P01`、`P02`…，前端、后端校验、管理员批量导入、测试脚本、README 与 `.env.example` 均已同步。
-- Coze 环境变量统一为腾讯云现有命名：`COZE_ACCESS_TOKEN`、`COZE_STRUCTURED_BOT_ID`、`COZE_AUTONOMOUS_BOT_ID`。
-- 已清除旧编号示例和旧 Coze 环境变量命名残留。
+代码级与 Mock 集成测试均已通过，但不能把 Mock 结果表述成真实 Coze/EdgeOne 联调成功。

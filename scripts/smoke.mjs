@@ -1,71 +1,11 @@
-process.env.NODE_ENV='test';
-process.env.USE_LOCAL_STORAGE='1';
-process.env.LOCAL_STORAGE_DIR='/tmp/design-assistant-smoke';
-process.env.EXPERIMENT_RUN_ID=`smoke_${Date.now()}`;
-process.env.ALLOWED_PARTICIPANTS='P01,P02';
-process.env.COZE_MOCK='1';
-process.env.COZE_ACCESS_TOKEN='mock';
-process.env.COZE_STRUCTURED_BOT_ID='structured_mock';
-process.env.COZE_AUTONOMOUS_BOT_ID='autonomous_mock';
-
-const {researchService}=await import('../src/services/researchService.js');
-const {cozeService}=await import('../src/services/cozeService.js');
-
-const id='P01';
-await researchService.touchStudent(id);
-let student=await researchService.getStudent(id);
-if(student.group!=='unassigned')throw new Error('New student must start unassigned');
-
-// Practice：普通GenAI配置，但学生端统一显示“AI学习助手”。
-await researchService.lockPracticeBefore(id,'我认为提手连接处可能是薄弱位置');
-let ps=await researchService.ensureChatSession(id,'practice','practice');
-let r=await cozeService.sendMessage({studentId:id,sessionId:ps.session_id,scope:'practice',mode:'practice',message:'我应该怎么看这个失败？',conversationId:ps.conversation_id});
-await researchService.addMessage(id,'practice',{role:'user',content:'我应该怎么看这个失败？'});
-await researchService.addMessage(id,'practice',{role:'assistant',content:r.assistant_message,conversation_id:r.conversation_id,bot_id:r.bot_id});
-await researchService.updateChatSession(id,'practice',{conversation_id:r.conversation_id,context_sent:true});
-await researchService.endChat(id,'practice');
-await researchService.completePractice(id,{practice_judgment_after:'我更关注连接处的受力证据',practice_final_decision:'先加强连接处再做相同条件测试'});
-
-// V2：原始时间 + P2_mean 自动保存；Q2由研究者人工录入。
-await researchService.saveSettings({practice_open:true,formal_v2_open:true,ai_stage_open:true,v3_submission_open:true,number_of_test_trials:3,max_chat_minutes:25,shared_rules_of_thumb:'一次只改变一个关键变量。'});
-await researchService.addPhoto(id,'V2',{file_name:'V2_smoke.jpg',file_path:'uploads/P01/V2/V2_smoke.jpg',student_id:id,version:'V2',mime:'image/jpeg',uploaded_at:new Date().toISOString()});
-const v2=await researchService.saveV2Evidence(id,{test_1:2.1,test_2:2.2,test_3:2.3,opened:'yes',sway:'some',rotation:'none',drift:'some',stable_canopy:'partial',other_observation:'有轻微摇摆'});
-if(v2.P2_mean!==2.2)throw new Error(`P2_mean incorrect: ${v2.P2_mean}`);
-await researchService.patchResearchScores(id,{Q2:7.5,G0:3,E0:3,H0:2,I0:3});
-let threw=false;try{await researchService.patchResearchScores(id,{Q2:6});}catch{threw=true}if(!threw)throw new Error('Invalid Q2 value was accepted');
-
-// 匹配完成后才分正式条件。
-await researchService.setMatching(id,{match_pair_id:'pair01',group:'structured'},'smoke',true);
-student=await researchService.getStudent(id);
-if(student.match_pair_id!=='pair01'||student.group!=='structured')throw new Error('Matching assignment failed');
-
-await researchService.lockJudgmentBefore(id,{judgment_before_problem:'摇摆',judgment_before_evidence:'三次测试都出现摇摆',judgment_before_idea:'调整悬线'});
-let fs=await researchService.ensureChatSession(id,'formal','structured');
-r=await cozeService.sendMessage({studentId:id,sessionId:fs.session_id,scope:'formal',mode:'structured',message:'我该怎样比较方案？',conversationId:fs.conversation_id});
-await researchService.addMessage(id,'formal',{role:'user',content:'我该怎样比较方案？'});
-await researchService.addMessage(id,'formal',{role:'assistant',content:r.assistant_message,conversation_id:r.conversation_id,bot_id:r.bot_id});
-await researchService.updateChatSession(id,'formal',{conversation_id:r.conversation_id,context_sent:true});
-const firstConv=r.conversation_id;
-r=await cozeService.sendMessage({studentId:id,sessionId:fs.session_id,scope:'formal',mode:'structured',message:'我还想继续比较。',conversationId:firstConv});
-if(r.conversation_id!==firstConv)throw new Error('Formal conversation_id changed across turns');
-await researchService.addMessage(id,'formal',{role:'user',content:'我还想继续比较。'});
-await researchService.addMessage(id,'formal',{role:'assistant',content:r.assistant_message,conversation_id:r.conversation_id,bot_id:r.bot_id});
-const ended=await researchService.endChat(id,'formal');
-if(ended.user_turn_count!==2||ended.assistant_turn_count!==2)throw new Error('Turn counts incorrect');
-if(ended.chat_duration===null||ended.chat_duration_seconds===null)throw new Error('Chat duration not recorded');
-
-await researchService.lockDecision(id,{decision_after_problem:'摇摆',decision_after_change:'调整悬线长度一致性',decision_after_reason:'对应测试观察到的摇摆',decision_after_test:'重点观察摇摆是否减少'});
-await researchService.addPhoto(id,'V3',{file_name:'V3_smoke.jpg',file_path:'uploads/P01/V3/V3_smoke.jpg',student_id:id,version:'V3',mime:'image/jpeg',uploaded_at:new Date().toISOString()});
-await researchService.saveV3(id,{actual_revision:'统一悬线长度',revision_difference:'',test_1:2.4,test_2:2.5,test_3:2.6,opened:'yes',sway:'none',rotation:'none',drift:'none',stable_canopy:'yes',other_observation:'更稳定'});
-await researchService.saveReflection(id,{result_match:'same',strongest_evidence:'摇摆减少且平均时间提高',reconsider_next:'继续比较伞面面积'});
-const all=await researchService.getCompleteStudentData(id);
-if(!all.practice.completed||!all.formal.reflection?.locked||all.formal.chat.length!==4)throw new Error('Smoke assertions failed');
-
-const id2='P02';
-await researchService.touchStudent(id2);
-await researchService.setMatching(id2,{match_pair_id:'pair01',group:'autonomous'},'smoke',true);
-const auto=await cozeService.sendMessage({studentId:id2,sessionId:'auto_smoke',scope:'formal',mode:'autonomous',message:'测试自主组',conversationId:null});
-if(auto.bot_id!=='autonomous_mock')throw new Error('Autonomous bot routing failed');
-const practiceBot=await cozeService.sendMessage({studentId:id2,sessionId:'practice_smoke',scope:'practice',mode:'practice',message:'测试练习',conversationId:null});
-if(practiceBot.bot_id!=='autonomous_mock')throw new Error('Practice bot routing failed');
-console.log('OK: Practice + Q2/P2 matching + Formal V2→AI→Decision→V3 smoke flow passed; chat duration/turn counts and bot routing verified.');
+import { rmSync, mkdtempSync } from 'node:fs';import { tmpdir } from 'node:os';import { join } from 'node:path';
+const temp=mkdtempSync(join(tmpdir(),'design-v9-'));process.env.NODE_ENV='test';process.env.USE_LOCAL_STORAGE='1';process.env.LOCAL_STORAGE_DIR=temp;process.env.EXPERIMENT_RUN_ID='smoke-v9';process.env.COZE_MOCK='1';process.env.COZE_ACCESS_TOKEN='mock';process.env.COZE_STRUCTURED_BOT_ID='scaffold_bot';process.env.COZE_AUTONOMOUS_BOT_ID='regular_bot';
+const {researchService}=await import('../src/services/researchService.js');const {cozeService}=await import('../src/services/cozeService.js');
+const id='P01';await researchService.createParticipant(id,{condition:'scaffold',grade:'7'});await researchService.saveSettings({practice_open:true,formal_round1_open:true,formal_round2_open:true,formal_round_count:2,max_chat_minutes:25,test_repeat_count:3,enable_self_verification:true});
+await researchService.lockPracticeBefore(id,{practice_revision_idea:'加强提手连接处，因为那里先脱开。',practice_evidence:'一侧提手连接处脱开，袋身其他位置基本完整。'});await researchService.markPracticeChatComplete(id);
+await researchService.addPhoto(id,'V1',{file_name:'v1.jpg',version:'V1'});await researchService.saveEvidence(id,1,{test_1:1.1,test_2:1.2,test_3:1.3,opened:'yes',sway:'some',rotation:'none',drift:'some',stable_canopy:'partial'});await researchService.lockInitial(id,1,{initial_problem:'摇摆',initial_evidence:'三次下降均观察到摇摆',initial_reason:'绳长或载荷可能不均'});
+let s=await researchService.ensureChatSession(id,'round1',{condition:'scaffold',bot_id:cozeService.botId('scaffold'),prompt_version:'v9.0',model:'same-model'});s.started_at=new Date().toISOString();s.conversation_id='conv1';await researchService.saveChatSession(id,'round1',s);for(let i=0;i<10;i++){await researchService.appendMessage(id,'round1',{role:'user',content:`u${i}`,message_id:`u${i}`});s.user_turn_count++;await researchService.appendMessage(id,'round1',{role:'assistant',content:`a${i}`,message_id:`a${i}`,bot_id:'scaffold_bot'});s.assistant_turn_count++;}await researchService.saveChatSession(id,'round1',s);await researchService.endChat(id,'round1');
+await researchService.lockFinal(id,1,{final_problem:'摇摆',final_evidence:'连续测试观察',final_reason:'可能受结构不对称影响',revision_decision:'调整绳长并检查对称',revision_reason:'直接对应摇摆问题'});await researchService.saveAlternative(id,1,{alternative_considered:'yes',alternative_text:'加大伞面',alternative_reject_reason:'优先处理对称性'});await researchService.addPhoto(id,'V2',{file_name:'v2.jpg',version:'V2'});await researchService.saveRevision(id,1,{actual_revision:'调整绳长并重新固定载荷',revision_difference:''});await researchService.saveSelfVerification(id,1,{self_tried:'yes',self_goal:'看是否还摇摆',self_method:'低高度试放',self_result:'摇摆减少'});await researchService.saveRetest(id,1,{test_1:1.4,test_2:1.5,test_3:1.6,opened:'yes',sway:'none',rotation:'none',drift:'some',stable_canopy:'yes'});await researchService.saveReflection(id,1,{reflection_match:'yes',reflection_note:'摇摆减少'});
+let stage=await researchService.getFormalStage(id);if(stage.stage!=='round2_initial')throw new Error(`Expected round2_initial, got ${stage.stage}`);await researchService.lockInitial(id,2,{initial_problem:'漂移',initial_evidence:'V2复测仍有漂移',initial_reason:'可能仍有不均衡'});s=await researchService.ensureChatSession(id,'round2',{condition:'scaffold',bot_id:'scaffold_bot',prompt_version:'v9.0',model:'same-model'});s.started_at=new Date().toISOString();await researchService.saveChatSession(id,'round2',s);await researchService.endChat(id,'round2');await researchService.lockFinal(id,2,{final_problem:'漂移',final_evidence:'复测观察',final_reason:'结构仍可能不均',revision_decision:'微调连接位置',revision_reason:'减少不对称'});await researchService.saveAlternative(id,2,{alternative_considered:'no'});await researchService.addPhoto(id,'V3',{file_name:'v3.jpg',version:'V3'});await researchService.saveRevision(id,2,{actual_revision:'微调连接位置'});await researchService.saveSelfVerification(id,2,{self_tried:'no'});await researchService.saveRetest(id,2,{test_1:1.6,test_2:1.7,test_3:1.8,opened:'yes',sway:'none',rotation:'none',drift:'none',stable_canopy:'yes'});await researchService.saveReflection(id,2,{reflection_match:'yes',reflection_evidence:'漂移消失',reflection_reconsider:'继续考虑下降时间与稳定性的平衡'});stage=await researchService.getFormalStage(id);if(stage.stage!=='complete')throw new Error(`Expected complete, got ${stage.stage}`);const data=await researchService.getCompleteParticipantData(id);if(data.round1.chat_session.user_turn_count!==10)throw new Error('Fixed-turn regression');if(data.round1.new_version.performance.mean_descent_time!==1.5)throw new Error('V2 mean incorrect');
+await researchService.createParticipant('DEMO-S',{condition:'scaffold',is_demo:true});await researchService.createParticipant('DEMO-R',{condition:'regular',is_demo:true});if((await researchService.getParticipant('DEMO-S')).condition!=='scaffold')throw new Error('Demo scaffold failed');if((await researchService.getParticipant('DEMO-R')).condition!=='regular')throw new Error('Demo regular failed');
+console.log('SMOKE OK: Practice + Round1 + 10-turn chat + V2 retest + Round2 + V3 + demo participants.');rmSync(temp,{recursive:true,force:true});

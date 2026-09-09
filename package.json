@@ -1,11 +1,12 @@
 {
   "name": "design-assistant-research",
-  "version": "6.0.0",
+  "version": "9.0.0",
   "type": "module",
-  "description": "生成式AI支架对初中生原型迭代影响研究平台",
+  "description": "生成式AI支架对初中生原型迭代影响研究平台 v9",
   "main": "cloud-functions/express/[[default]].js",
   "scripts": {
     "start": "node server.js",
+    "build": "node scripts/check.mjs",
     "check": "node scripts/check.mjs",
     "test": "node scripts/smoke.mjs"
   },
@@ -18,7 +19,5 @@
     "multer": "^1.4.5-lts.1",
     "uuid": "^9.0.1"
   },
-  "engines": {
-    "node": ">=20.0.0"
-  }
+  "engines": {"node": ">=20.0.0"}
 }
