@@ -1,6 +1,6 @@
 {
   "name": "design-assistant-research",
-  "version": "5.0.0",
+  "version": "6.0.0",
   "type": "module",
   "description": "生成式AI支架对初中生原型迭代影响研究平台",
   "main": "cloud-functions/express/[[default]].js",

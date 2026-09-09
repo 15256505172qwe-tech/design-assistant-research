@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>研究管理后台</title><link rel="stylesheet" href="/css/app.css?v=5.0"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>研究管理后台</title><link rel="stylesheet" href="/css/app.css?v=6.0"></head>
 <body>
 <div id="login" class="login-shell"><section class="card login-card"><h1>管理员登录</h1><form id="loginForm" class="form"><input type="password" id="password" placeholder="管理员密码" required><div id="loginError" class="notice warn hidden"></div><button class="btn" style="width:100%">登录</button></form></section></div>
 <div id="app" class="hidden">
@@ -11,10 +11,10 @@
 
 <section class="card" style="margin-top:18px"><span class="eyebrow">导出研究数据</span><div class="export-grid" id="exports"></div></section>
 
-<section class="card" style="margin-top:18px"><span class="eyebrow">批量导入匹配与组别</span><p class="small">每行写：<strong>S001 pair01 structured</strong>。三列依次为 student_id / match_pair_id / group；可用空格、Tab或英文逗号分隔。</p><textarea id="bulkText" style="width:100%;min-height:90px" placeholder="S001 pair01 structured&#10;S002 pair01 autonomous"></textarea><button class="btn secondary" id="bulkBtn">批量保存</button></section>
+<section class="card" style="margin-top:18px"><span class="eyebrow">批量导入匹配与组别</span><p class="small">每行写：<strong>P01 pair01 structured</strong>。三列依次为 student_id / match_pair_id / group；可用空格、Tab或英文逗号分隔。</p><textarea id="bulkText" style="width:100%;min-height:90px" placeholder="P01 pair01 structured&#10;P02 pair01 autonomous"></textarea><button class="btn secondary" id="bulkBtn">批量保存</button></section>
 
 <section class="card" style="margin-top:18px"><span class="eyebrow">学生匹配列表</span><div class="row" style="margin-bottom:12px"><button class="btn secondary" id="sortQ2">按Q2排序</button><button class="btn secondary" id="sortP2">按P2_mean排序</button><button class="btn secondary" id="sortId">按编号排序</button></div><div id="students"></div></section>
 
 <section class="card" id="detail" style="margin-top:18px"><p class="small">点击学生查看完整过程链、录入Q2与匹配信息。</p></section>
 </main></div>
-<script src="/js/common.js?v=5.0"></script><script src="/js/admin.js?v=5.0"></script></body></html>
+<script src="/js/common.js?v=6.0"></script><script src="/js/admin.js?v=6.0"></script></body></html>

@@ -10,7 +10,7 @@ for(const f of must){try{readFileSync(join(root,f))}catch{bad=true;console.error
 const studentFiles=['public/index.html','public/home.html','public/practice.html','public/formal.html','public/chat.html','public/decision.html','public/v3.html','public/complete.html','public/js/index.js','public/js/home.js','public/js/practice.js','public/js/formal.js','public/js/chat.js','public/js/decision.js','public/js/v3.js'];
 const studentPublic=studentFiles.map(f=>readFileSync(join(root,f),'utf8')).join('\n');
 for(const token of ['IDTLM','Troubleshoot','Weigh Options','Revise/Iterate','Reflect on Process','实验组','对照组','Structured','Autonomous','Base AI'])if(studentPublic.includes(token)){bad=true;console.error('Student UI exposes research term:',token)}
-for(const token of ['COZE_API_TOKEN','COZE_ACCESS_TOKEN','STRUCTURED_BOT_ID','AUTONOMOUS_BOT_ID'])if(studentPublic.includes(token)){bad=true;console.error('Frontend exposes secret env name:',token)}
+for(const token of ['COZE_ACCESS_TOKEN','COZE_STRUCTURED_BOT_ID','COZE_AUTONOMOUS_BOT_ID'])if(studentPublic.includes(token)){bad=true;console.error('Frontend exposes secret env name:',token)}
 const config=readFileSync(join(root,'src/config/researchConfig.js'),'utf8');
 if(!config.includes("practice_open: true")){bad=true;console.error('Practice not open by default')}
 for(const x of ["'Q2'","'G0'","'E0'","'H0'","'I0'"])if(!config.includes(x)){bad=true;console.error('Matching/score field missing',x)}

@@ -46,3 +46,8 @@
 5. 用至少两个测试编号完成一次：V2 → Q2录入 → match_pair_id → 分组 → 正式AI → 导出 `matching.csv` / `chat_sessions.csv`。
 
 尝试执行 `npm install` 时当前容器网络超时，因此未完成真实依赖下载；但 `npm run check` 与不依赖在线 Coze/外部包的 Mock smoke 测试均已通过。EdgeOne 部署会按 `npm install` 安装依赖。
+
+## v6.0 编号与环境变量统一
+- 学生编号统一为 `P01`、`P02`…，前端、后端校验、管理员批量导入、测试脚本、README 与 `.env.example` 均已同步。
+- Coze 环境变量统一为腾讯云现有命名：`COZE_ACCESS_TOKEN`、`COZE_STRUCTURED_BOT_ID`、`COZE_AUTONOMOUS_BOT_ID`。
+- 已清除旧编号示例和旧 Coze 环境变量命名残留。

@@ -3,7 +3,7 @@ export function normalizeStudentId(value) {
 }
 
 export function validateStudentId(value) {
-  return /^S\d{3}$/.test(normalizeStudentId(value));
+  return /^P\d{2}$/.test(normalizeStudentId(value));
 }
 
 export function validateMessage(value) {

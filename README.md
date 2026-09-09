@@ -1,4 +1,4 @@
-# 设计助手｜硕士论文研究实验平台 v5.0
+# 设计助手｜硕士论文研究实验平台 v6.0
 
 研究主题：**《生成式AI支架对初中生原型迭代的影响研究》**。
 
@@ -77,11 +77,11 @@ Formal chat session 持续记录：
 复制 `.env.example` 为 `.env`（本地）或在 EdgeOne 项目设置中添加：
 
 ```text
-COZE_API_TOKEN=
-STRUCTURED_BOT_ID=
-AUTONOMOUS_BOT_ID=
+COZE_ACCESS_TOKEN=
+COZE_STRUCTURED_BOT_ID=
+COZE_AUTONOMOUS_BOT_ID=
 ADMIN_PASSWORD=
-ALLOWED_PARTICIPANTS=S001,S002,S003
+ALLOWED_PARTICIPANTS=P01,P02,P03
 BLOB_STORE_NAME=design-assistant-research-data
 EXPERIMENT_RUN_ID=pilot01
 NODE_ENV=production
@@ -89,7 +89,7 @@ NODE_ENV=production
 
 长期部署建议使用 Coze 服务访问令牌 SAT。Token 只能放在服务器环境变量，不能写入前端或 GitHub。
 
-兼容旧变量名：`COZE_ACCESS_TOKEN`、`COZE_STRUCTURED_BOT_ID`、`COZE_AUTONOMOUS_BOT_ID`。
+为避免与腾讯云现有配置混淆，本版只使用以上三个 Coze 环境变量名。
 
 ## 本地运行
 

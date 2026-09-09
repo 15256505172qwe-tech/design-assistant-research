@@ -1,19 +1,19 @@
 class CozeService {
   token() {
-    const value = process.env.COZE_API_TOKEN || process.env.COZE_ACCESS_TOKEN;
-    if (!value) throw new Error('Missing COZE_API_TOKEN');
+    const value = process.env.COZE_ACCESS_TOKEN;
+    if (!value) throw new Error('Missing COZE_ACCESS_TOKEN');
     return value;
   }
 
   botId(mode) {
     if (mode === 'structured') {
-      const id = process.env.STRUCTURED_BOT_ID || process.env.COZE_STRUCTURED_BOT_ID;
-      if (!id) throw new Error('Missing STRUCTURED_BOT_ID');
+      const id = process.env.COZE_STRUCTURED_BOT_ID;
+      if (!id) throw new Error('Missing COZE_STRUCTURED_BOT_ID');
       return id;
     }
     if (mode === 'autonomous' || mode === 'practice') {
-      const id = process.env.AUTONOMOUS_BOT_ID || process.env.COZE_AUTONOMOUS_BOT_ID;
-      if (!id) throw new Error('Missing AUTONOMOUS_BOT_ID');
+      const id = process.env.COZE_AUTONOMOUS_BOT_ID;
+      if (!id) throw new Error('Missing COZE_AUTONOMOUS_BOT_ID');
       return id;
     }
     throw new Error('Invalid bot mode');
